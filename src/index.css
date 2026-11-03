@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #0a0a0a;
+  --color-sale: #e5341f;
+  --color-sale-dark: #c42912;
+  --color-surface-light: #ffffff;
+  --color-surface-subtle: #fafafa;
+  --color-surface-muted: #f4f4f4;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --shadow-nav: 0 1px 0 0 rgba(10,10,10,0.08), 0 8px 24px -16px rgba(10,10,10,0.18);
+  --shadow-badge-ring: 0 0 0 2px #ffffff, 0 1px 2px 0 rgba(229,52,31,0.45);
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  html.dark body {
+    font-family: var(--font-sans);
+    background-color: #0a0a0a;
+    color: #f5f5f5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior-y: none;
+  }
+  html:not(.dark) body {
+    font-family: var(--font-sans);
+    background-color: var(--color-surface-light);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior-y: none;
+  }
+}
+
+/* Custom scrollbar for horizontal rails */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* iOS Safe Area Utilities */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Google Identity Services Button responsive constraints */
+.g_id_signin,
+[id^="g_id_signin"],
+.nsm7Bb-HzV7m-LgbsSe {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+iframe[src*="accounts.google.com/gsi/button"] {
+  max-width: 100% !important;
+}
