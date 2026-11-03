@@ -10,16 +10,20 @@ import { ExternalLink, ShieldCheck } from 'lucide-react';
 const FRONTEND_URL = (import.meta as any).env?.VITE_FRONTEND_URL || 'https://jutakaprafrontend.vercel.app';
 
 const AdminPortalShell: React.FC = () => {
-  const { currentView, setCurrentView, themeMode, isAdminAuthenticated } = useStore();
+  const { currentView, navigateTo, themeMode, isAdminAuthenticated, currentAdminUser } = useStore();
+
+  const isAuthed = isAdminAuthenticated || Boolean(currentAdminUser);
 
   useEffect(() => {
-    // If not on an admin view, ensure default to admin dashboard or login
-    if (currentView !== 'admin' && currentView !== 'admin-login') {
-      setCurrentView(isAdminAuthenticated ? 'admin' : 'admin-login');
+    // If not authenticated, ensure routed to admin-login
+    if (!isAuthed && currentView !== 'admin-login') {
+      navigateTo('admin-login');
+    } else if (isAuthed && currentView !== 'admin') {
+      navigateTo('admin');
     }
-  }, [currentView, isAdminAuthenticated, setCurrentView]);
+  }, [isAuthed, currentView, navigateTo]);
 
-  if (!isAdminAuthenticated && currentView !== 'admin') {
+  if (!isAuthed) {
     return (
       <div className={`min-h-screen ${themeMode === 'dark' ? 'bg-[#0b0e14] text-white' : 'bg-neutral-100 text-[#0a0a0a]'} flex flex-col items-center justify-center font-sans p-4`}>
         <div className="w-full max-w-md mb-4 flex items-center justify-between px-2 text-xs text-neutral-400">

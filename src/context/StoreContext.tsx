@@ -55,6 +55,7 @@ interface StoreContextType {
   // Navigation
   currentView: string;
   navigateTo: (view: string, param?: string) => void;
+  setCurrentView?: (view: string, param?: string) => void;
   productParam: string | null;
 
   // Theme & Layout Settings
@@ -3606,6 +3607,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       value={{
         currentView,
         navigateTo,
+        setCurrentView: navigateTo,
         productParam,
         themeMode,
         setThemeMode,
