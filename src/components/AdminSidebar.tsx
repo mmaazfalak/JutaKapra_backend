@@ -83,18 +83,18 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       ]
     : [
         {
-          title: 'COMMERCE',
+          title: 'COMMERCE & STORES',
           items: [
-            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { id: 'stores', label: 'Store Management', icon: Store, badge: stores.length, badgeColor: 'bg-blue-500/20 text-blue-400' },
+            { id: 'products', label: 'Products & Inventory', icon: Package },
             {
               id: 'orders',
-              label: 'Orders',
+              label: 'Orders & Deliveries',
               icon: ShoppingBag,
               badge: pendingOrdersCount > 0 ? pendingOrdersCount : undefined,
               badgeColor: 'bg-[#fef2f2] text-[#dc2626]',
             },
-            { id: 'products', label: 'Products & Inventory', icon: Package },
-            { id: 'stores', label: 'Stores & Accounts', icon: Store, badge: stores.length, badgeColor: 'bg-blue-500/20 text-blue-400' },
+            { id: 'dashboard', label: 'Analytics Dashboard', icon: LayoutDashboard },
             { id: 'drops', label: 'Drop Calendar', icon: Calendar },
           ],
         },

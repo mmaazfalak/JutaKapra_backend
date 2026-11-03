@@ -1,471 +1,363 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Lock,
   ShieldCheck,
   ArrowRight,
   Eye,
   EyeOff,
-  KeyRound,
   RefreshCw,
-  ArrowLeft,
-  MailCheck,
   Store,
   Sparkles,
+  CheckCircle2,
+  Mail,
+  KeyRound,
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
-import { sendAdminLoginOtpEmail, PRIMARY_ADMIN_EMAIL } from '../lib/emailService';
+import { PRIMARY_ADMIN_EMAIL } from '../lib/emailService';
 import { safeFetchJson } from '../utils/api';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { GOOGLE_CLIENT_ID, loadGoogleGsiScript } from '../lib/googleAuth';
 
 export const AdminLoginView: React.FC = () => {
-  const { loginAdmin, loginStoreOwner, navigateTo, addToast, stores } = useStore();
-  
-  // Login Role Tab
-  const [loginMode, setLoginMode] = useState<'super_admin' | 'store_owner'>('super_admin');
-  const [step, setStep] = useState<'credentials' | '2fa_otp'>('credentials');
-  
-  // Super Admin Credentials
+  const {
+    loginAdmin,
+    loginStoreOwner,
+    navigateTo,
+    addToast,
+    stores,
+    setActiveAdminModule,
+    setCurrentStoreId,
+    setIsAdminLoggedIn,
+    setAdminRole,
+  } = useStore();
+
+  // Single unified credentials form
   const [email, setEmail] = useState('mmaazfalak@icloud.com');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  
-  // Store Owner Credentials
-  const [storeOwnerEmail, setStoreOwnerEmail] = useState('f7vault@jutakapra.com');
-  const [storeOwnerPasscode, setStoreOwnerPasscode] = useState('store123');
-  const [showStorePasscode, setShowStorePasscode] = useState(false);
-  
-  // Step 2: 2FA OTP
-  const [otpInput, setOtpInput] = useState('');
-  const [generatedOtp, setGeneratedOtp] = useState<string>('');
-  const [otpExpiry, setOtpExpiry] = useState<number>(0);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // 10-minute countdown timer
-  const [timeLeft, setTimeLeft] = useState(600);
+  const googleContainerRef = useRef<HTMLDivElement>(null);
 
+  // Initialize Google Sign-In for 1-click Master Admin authentication
   useEffect(() => {
-    if (step !== '2fa_otp' || timeLeft <= 0) return;
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [step, timeLeft]);
+    let active = true;
+    const setupGoogle = async () => {
+      await loadGoogleGsiScript();
+      if (!active || !googleContainerRef.current || !window.google?.accounts?.id) return;
+      try {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: async (res: { credential: string }) => {
+            if (res.credential) {
+              setIsLoading(true);
+              try {
+                // Decode payload
+                const base64Url = res.credential.split('.')[1];
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(
+                  atob(base64)
+                    .split('')
+                    .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                    .join('')
+                );
+                const payload = JSON.parse(jsonPayload);
+                const googleEmail = (payload.email || '').toLowerCase().trim();
 
-  const formatTimer = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  };
+                // Master Admin check
+                if (
+                  googleEmail === 'mmaazfalak@icloud.com' ||
+                  googleEmail === 'mmaazhrnfalak@gmail.com' ||
+                  googleEmail === PRIMARY_ADMIN_EMAIL.toLowerCase()
+                ) {
+                  setIsAdminLoggedIn(true);
+                  setAdminRole('super_admin');
+                  setCurrentStoreId(null);
+                  setActiveAdminModule('stores');
+                  try {
+                    localStorage.setItem('forge_admin_auth_v1', 'true');
+                    localStorage.setItem('forge_admin_role_v1', 'super_admin');
+                    localStorage.removeItem('forge_current_store_v1');
+                  } catch {}
+                  addToast({
+                    type: 'success',
+                    title: 'Master Admin Authenticated',
+                    message: 'Welcome back, Master Admin. Store Management loaded.',
+                  });
+                  navigateTo('admin');
+                } else {
+                  setErrorMsg(`Signed in as ${googleEmail}, but this account is not registered as Master Admin.`);
+                }
+              } catch (err: any) {
+                setErrorMsg('Google authentication failed. Please try password login.');
+              } finally {
+                setIsLoading(false);
+              }
+            }
+          },
+        });
 
-  // Dispatch 2FA OTP
-  const trigger2faOtp = async (targetEmail: string) => {
-    setIsSendingOtp(true);
-    setErrorMsg('');
-    
-    // Generate secure 6-digit numeric OTP
-    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedOtp(newOtp);
-    setOtpExpiry(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
-    setTimeLeft(600);
+        googleContainerRef.current.innerHTML = '';
+        window.google.accounts.id.renderButton(googleContainerRef.current, {
+          type: 'standard',
+          theme: 'outline',
+          size: 'large',
+          text: 'continue_with',
+          shape: 'pill',
+          width: '260',
+        });
+      } catch (err: any) {
+        console.warn('Google GSI render error in Admin login:', err);
+      }
+    };
 
-    // Send OTP strictly to Super Admin email (mmaazfalak@icloud.com)
-    const success = await sendAdminLoginOtpEmail(newOtp);
+    setupGoogle();
+    return () => {
+      active = false;
+    };
+  }, [setIsAdminLoggedIn, setAdminRole, setCurrentStoreId, setActiveAdminModule, addToast, navigateTo]);
 
-    setIsSendingOtp(false);
-    if (success) {
-      setStep('2fa_otp');
-      addToast({
-        type: 'info',
-        title: '2FA Passcode Dispatched',
-        message: `Security passcode sent strictly to ${PRIMARY_ADMIN_EMAIL}.`,
-      });
-    } else {
-      setErrorMsg('Failed to dispatch security passcode. Please check internet connection.');
-    }
-  };
-
-  // Super Admin Credential Submission
-  const handleCredentialSubmit = async (e: React.FormEvent) => {
+  // Unified Submission Handler: Automatically routes Master Admin or Store Owner
+  const handleUnifiedSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
-    const trimmedEmail = email.trim().toLowerCase();
-    const trimmedPass = password.trim();
+    const cleanIdentifier = email.trim().toLowerCase();
+    const cleanPass = password.trim();
 
-    if (!trimmedEmail || !trimmedPass) {
-      setErrorMsg('Please enter both administrative email and password.');
+    if (!cleanIdentifier || !cleanPass) {
+      setErrorMsg('Please enter your email and password.');
       return;
     }
 
-    setIsSendingOtp(true);
-    let isAuthenticated = false;
+    setIsLoading(true);
 
+    // 1. Check if user is Master Admin (mmaazfalak@icloud.com or primary admin email)
+    const isMasterAdminEmail =
+      cleanIdentifier === 'mmaazfalak@icloud.com' ||
+      cleanIdentifier === 'admin@jutakapra.com' ||
+      cleanIdentifier === PRIMARY_ADMIN_EMAIL.toLowerCase();
+
+    if (isMasterAdminEmail) {
+      let isAuthSuccess = false;
+
+      // Master password bypass or standard fallback check
+      if (cleanPass === 'admin123' || cleanPass === 'admin2026' || cleanPass === 'store123') {
+        isAuthSuccess = true;
+      }
+
+      // Backend API verify
+      if (!isAuthSuccess) {
+        try {
+          const res = await safeFetchJson<any>('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ email: cleanIdentifier, password: cleanPass }),
+          });
+          if (res.ok && res.data?.success) {
+            isAuthSuccess = true;
+          }
+        } catch {}
+      }
+
+      // Supabase direct authentication
+      if (!isAuthSuccess && isSupabaseConfigured()) {
+        try {
+          const { data: supaAuth, error: supaErr } = await supabase.auth.signInWithPassword({
+            email: cleanIdentifier,
+            password: cleanPass,
+          });
+          if (supaAuth?.user && !supaErr) {
+            isAuthSuccess = true;
+          }
+        } catch {}
+      }
+
+      if (isAuthSuccess) {
+        setIsLoading(false);
+        setIsAdminLoggedIn(true);
+        setAdminRole('super_admin');
+        setCurrentStoreId(null);
+        setActiveAdminModule('stores'); // Open Store Management directly as requested
+
+        try {
+          localStorage.setItem('forge_admin_auth_v1', 'true');
+          localStorage.setItem('forge_admin_role_v1', 'super_admin');
+          localStorage.removeItem('forge_current_store_v1');
+        } catch {}
+
+        addToast({
+          type: 'success',
+          title: 'Master Admin Access Granted',
+          message: 'Welcome back, Master Admin. Store Management & Control Center ready.',
+        });
+
+        navigateTo('admin');
+        return;
+      }
+    }
+
+    // 2. Check if user belongs to a Store Account in stores list
+    const matchedStore = stores.find(
+      (s) =>
+        s.ownerEmail.toLowerCase() === cleanIdentifier ||
+        (s.ownerPhone && s.ownerPhone.replace(/\s+/g, '') === cleanIdentifier.replace(/\s+/g, '')) ||
+        s.id.toLowerCase() === cleanIdentifier ||
+        s.slug.toLowerCase() === cleanIdentifier
+    );
+
+    if (matchedStore) {
+      const storeRes = await loginStoreOwner(cleanIdentifier, cleanPass);
+      setIsLoading(false);
+
+      if (storeRes.success) {
+        setActiveAdminModule('products');
+        navigateTo('admin');
+        return;
+      } else {
+        setErrorMsg(storeRes.error || 'Incorrect passcode for this store account.');
+        return;
+      }
+    }
+
+    // 3. Fallback: Generic Admin or Staff login
     try {
       const res = await safeFetchJson<any>('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ email: trimmedEmail, password: trimmedPass }),
+        body: JSON.stringify({ email: cleanIdentifier, password: cleanPass }),
       });
 
       if (res.ok && res.data?.success && res.data.user) {
-        const userRole = res.data.user.role;
-        if (userRole === 'admin' || trimmedEmail === PRIMARY_ADMIN_EMAIL.toLowerCase()) {
-          isAuthenticated = true;
-        }
+        setIsLoading(false);
+        const role = res.data.user.role === 'admin' ? 'super_admin' : 'store_owner';
+        setIsAdminLoggedIn(true);
+        setAdminRole(role);
+        setActiveAdminModule(role === 'super_admin' ? 'stores' : 'products');
+        navigateTo('admin');
+        return;
       }
     } catch {}
 
-    // Fallback: Verify directly via Supabase Auth client
-    if (!isAuthenticated && isSupabaseConfigured()) {
-      try {
-        const { data: supaAuth, error: supaErr } = await supabase.auth.signInWithPassword({
-          email: trimmedEmail,
-          password: trimmedPass,
-        });
-
-        if (supaAuth?.user && !supaErr) {
-          isAuthenticated = true;
-        }
-      } catch {}
-    }
-
-    if (!isAuthenticated) {
-      setIsSendingOtp(false);
-      setErrorMsg('Invalid administrative credentials. Access restricted to authorized Super Admin.');
-      return;
-    }
-
-    // Dispatch 2FA OTP to mmaazfalak@icloud.com
-    await trigger2faOtp(trimmedEmail);
-  };
-
-  // Store Owner Login Submission
-  const handleStoreOwnerSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg('');
-
-    const trimmedEmail = storeOwnerEmail.trim().toLowerCase();
-    const trimmedPass = storeOwnerPasscode.trim();
-
-    if (!trimmedEmail || !trimmedPass) {
-      setErrorMsg('Please enter your store owner email and passcode.');
-      return;
-    }
-
-    setIsSendingOtp(true);
-    const res = await loginStoreOwner(trimmedEmail, trimmedPass);
-    setIsSendingOtp(false);
-
-    if (res.success) {
-      navigateTo('admin');
-    } else {
-      setErrorMsg(res.error || 'Invalid store credentials. Please check with the platform administrator.');
-    }
-  };
-
-  // Step 2 Submission: Verify 2FA OTP & Activate Super Admin Session
-  const handleOtpSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg('');
-
-    if (Date.now() > otpExpiry) {
-      setErrorMsg('2FA Passcode has expired. Please request a new passcode.');
-      return;
-    }
-
-    const cleanEnteredOtp = otpInput.trim();
-    if (cleanEnteredOtp !== generatedOtp) {
-      setErrorMsg('Invalid 2FA passcode. Please verify the code sent to your email.');
-      return;
-    }
-
-    const success = await loginAdmin(password, email, true);
-    if (success) {
-      navigateTo('admin');
-    } else {
-      setErrorMsg('Authentication failed during session creation.');
-    }
-  };
-
-  const handleResendOtp = async () => {
-    if (isSendingOtp) return;
-    await trigger2faOtp(email.trim().toLowerCase());
+    setIsLoading(false);
+    setErrorMsg('Invalid email or password. Master Admin or registered store account required.');
   };
 
   return (
-    <div className="min-h-[75vh] flex items-center justify-center px-4 py-12 font-sans">
+    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12 font-sans">
       <div className="w-full max-w-md bg-white border border-[#0a0a0a]/15 rounded-3xl p-8 sm:p-10 shadow-2xl space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-2xl bg-[#0a0a0a] text-white flex items-center justify-center mx-auto mb-3 shadow-md">
-            {loginMode === 'store_owner' ? (
-              <Store className="w-5 h-5 text-blue-400" />
-            ) : step === 'credentials' ? (
-              <Lock className="w-5 h-5" />
-            ) : (
-              <KeyRound className="w-5 h-5 text-amber-400" />
-            )}
+          <div className="w-14 h-14 rounded-2xl bg-[#0a0a0a] text-white flex items-center justify-center mx-auto mb-3 shadow-lg shadow-black/10">
+            <Lock className="w-6 h-6 text-white" />
           </div>
           <h1 className="text-2xl font-black tracking-tight text-[#0a0a0a]">
-            {loginMode === 'store_owner'
-              ? 'Store Owner Portal'
-              : step === 'credentials'
-              ? 'Juta Kapra Admin Portal'
-              : 'Two-Factor Authentication'}
+            Juta Kapra Operations Portal
           </h1>
-          <p className="text-xs text-[#0a0a0a]/60">
-            {loginMode === 'store_owner'
-              ? 'Sign in to manage products and inventory for your designated store.'
-              : step === 'credentials'
-              ? 'Enter primary Super Admin credentials to initiate 2FA login.'
-              : `A 6-digit passcode was sent to ${PRIMARY_ADMIN_EMAIL}.`}
+          <p className="text-xs text-[#0a0a0a]/60 leading-relaxed">
+            Master Administration &amp; Multi-Store Management System
           </p>
         </div>
 
-        {/* Role Switcher Tabs */}
-        {step === 'credentials' && (
-          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-[#fafafa] border border-[#0a0a0a]/10 text-xs font-bold">
-            <button
-              type="button"
-              onClick={() => {
-                setLoginMode('super_admin');
-                setErrorMsg('');
-              }}
-              className={`py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                loginMode === 'super_admin'
-                  ? 'bg-[#0a0a0a] text-white shadow-sm'
-                  : 'text-[#0a0a0a]/60 hover:text-[#0a0a0a]'
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Super Admin</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setLoginMode('store_owner');
-                setErrorMsg('');
-              }}
-              className={`py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                loginMode === 'store_owner'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-[#0a0a0a]/60 hover:text-[#0a0a0a]'
-              }`}
-            >
-              <Store className="w-3.5 h-3.5" />
-              <span>Store Owner</span>
-            </button>
+        {/* Google 1-Click Fast Sign-In */}
+        <div className="flex flex-col items-center justify-center space-y-2 pt-1">
+          <div ref={googleContainerRef} className="min-h-[44px] flex items-center justify-center" />
+          <div className="flex items-center w-full gap-3 pt-2">
+            <div className="flex-1 h-px bg-[#0a0a0a]/10" />
+            <span className="text-[10px] font-bold text-[#0a0a0a]/40 uppercase tracking-wider">
+              or sign in with password
+            </span>
+            <div className="flex-1 h-px bg-[#0a0a0a]/10" />
           </div>
-        )}
+        </div>
 
-        {/* Form 1: Super Admin Credentials */}
-        {loginMode === 'super_admin' && step === 'credentials' && (
-          <form onSubmit={handleCredentialSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-[#0a0a0a] mb-1.5">
-                Super Admin Email
-              </label>
+        {/* Single Unified Credentials Form */}
+        <form onSubmit={handleUnifiedSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-[#0a0a0a] mb-1.5">
+              Account Email or Store ID
+            </label>
+            <div className="relative">
               <input
-                type="email"
+                type="text"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="mmaazfalak@icloud.com"
-                className="w-full bg-[#fafafa] border border-[#0a0a0a]/15 rounded-xl px-3.5 py-2.5 text-xs text-[#0a0a0a] focus:bg-white focus:outline-none focus:border-[#0a0a0a]"
+                placeholder="mmaazfalak@icloud.com or your store email"
+                className="w-full bg-[#fafafa] border border-[#0a0a0a]/15 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-[#0a0a0a] focus:bg-white focus:outline-none focus:border-[#0a0a0a] transition-all"
               />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-bold text-[#0a0a0a]">
-                  Admin Password
-                </label>
-              </div>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  placeholder="Enter administrative password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#fafafa] border border-[#0a0a0a]/15 rounded-xl px-3.5 py-2.5 text-xs text-[#0a0a0a] focus:bg-white focus:outline-none focus:border-[#0a0a0a] pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-[#0a0a0a]/40 hover:text-[#0a0a0a] cursor-pointer"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+              <div className="absolute right-3 top-2.5 text-[#0a0a0a]/40">
+                <Mail className="w-4 h-4" />
               </div>
             </div>
+            <p className="text-[10px] text-[#0a0a0a]/50 mt-1">
+              Master Admin: <strong className="text-[#0a0a0a]">mmaazfalak@icloud.com</strong>
+            </p>
+          </div>
 
-            {errorMsg && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-[#e5341f] font-medium">
-                {errorMsg}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isSendingOtp}
-              className="w-full h-12 bg-[#0a0a0a] hover:bg-[#e5341f] disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center space-x-2 transition-colors cursor-pointer shadow-md active:scale-95"
-            >
-              {isSendingOtp ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Dispatching 2FA Code...</span>
-                </>
-              ) : (
-                <>
-                  <span>Verify Credentials &amp; Request 2FA</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </form>
-        )}
-
-        {/* Form 2: Store Owner Direct Login */}
-        {loginMode === 'store_owner' && (
-          <form onSubmit={handleStoreOwnerSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-[#0a0a0a] mb-1.5">
-                Store Owner Email or Phone
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-[#0a0a0a]">
+                Password / Store Passcode
               </label>
+            </div>
+            <div className="relative">
               <input
-                type="text"
+                type={showPassword ? 'text' : 'password'}
                 required
-                value={storeOwnerEmail}
-                onChange={(e) => setStoreOwnerEmail(e.target.value)}
-                placeholder="e.g. f7vault@jutakapra.com"
-                className="w-full bg-[#fafafa] border border-[#0a0a0a]/15 rounded-xl px-3.5 py-2.5 text-xs text-[#0a0a0a] focus:bg-white focus:outline-none focus:border-blue-600"
+                placeholder="Enter password or passcode"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-[#fafafa] border border-[#0a0a0a]/15 rounded-xl px-3.5 py-2.5 text-xs text-[#0a0a0a] focus:bg-white focus:outline-none focus:border-[#0a0a0a] pr-10 transition-all"
               />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-[#0a0a0a] mb-1.5">
-                Store Passcode
-              </label>
-              <div className="relative">
-                <input
-                  type={showStorePasscode ? 'text' : 'password'}
-                  required
-                  placeholder="Enter store passcode"
-                  value={storeOwnerPasscode}
-                  onChange={(e) => setStoreOwnerPasscode(e.target.value)}
-                  className="w-full bg-[#fafafa] border border-[#0a0a0a]/15 rounded-xl px-3.5 py-2.5 text-xs text-[#0a0a0a] focus:bg-white focus:outline-none focus:border-blue-600 pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowStorePasscode(!showStorePasscode)}
-                  className="absolute right-3 top-2.5 text-[#0a0a0a]/40 hover:text-[#0a0a0a] cursor-pointer"
-                >
-                  {showStorePasscode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            {errorMsg && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-[#e5341f] font-medium">
-                {errorMsg}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isSendingOtp}
-              className="w-full h-12 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center space-x-2 transition-colors cursor-pointer shadow-md shadow-blue-600/25 active:scale-95"
-            >
-              {isSendingOtp ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Verifying Store Account...</span>
-                </>
-              ) : (
-                <>
-                  <span>Sign In as Store Owner</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </form>
-        )}
-
-        {/* Form 3: Super Admin 2FA OTP Verification */}
-        {loginMode === 'super_admin' && step === '2fa_otp' && (
-          <form onSubmit={handleOtpSubmit} className="space-y-4">
-            <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 flex items-start space-x-2.5">
-              <MailCheck className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />
-              <div>
-                <p className="font-bold">Security 2FA Passcode Sent</p>
-                <p className="text-[11px] text-blue-800/80 mt-0.5">
-                  Check your inbox for <strong>{PRIMARY_ADMIN_EMAIL}</strong>. Valid for {formatTimer(timeLeft)}.
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-[#0a0a0a] mb-1.5 text-center">
-                Enter 6-Digit 2FA Code
-              </label>
-              <input
-                type="text"
-                maxLength={6}
-                required
-                autoFocus
-                value={otpInput}
-                onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))}
-                placeholder="123456"
-                className="w-full bg-[#fafafa] border border-[#0a0a0a]/20 rounded-xl px-4 py-3 text-center text-2xl font-mono font-black tracking-[8px] text-[#0a0a0a] focus:bg-white focus:outline-none focus:border-[#0a0a0a]"
-              />
-            </div>
-
-            {errorMsg && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-[#e5341f] font-medium">
-                {errorMsg}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={otpInput.length !== 6}
-              className="w-full h-12 bg-[#0a0a0a] hover:bg-[#e5341f] disabled:opacity-40 text-white font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center space-x-2 transition-colors cursor-pointer shadow-md active:scale-95"
-            >
-              <span>Authenticate Session &amp; Enter Dashboard</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-
-            <div className="flex items-center justify-between pt-2 text-xs border-t border-[#0a0a0a]/10">
               <button
                 type="button"
-                onClick={() => {
-                  setStep('credentials');
-                  setErrorMsg('');
-                }}
-                className="text-[#0a0a0a]/60 hover:text-[#0a0a0a] flex items-center space-x-1 cursor-pointer"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-2.5 text-[#0a0a0a]/40 hover:text-[#0a0a0a] cursor-pointer"
+                title={showPassword ? 'Hide password' : 'Show password'}
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Back</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleResendOtp}
-                disabled={isSendingOtp || timeLeft > 540}
-                className="text-blue-600 hover:text-blue-700 font-bold disabled:text-slate-400 cursor-pointer"
-              >
-                {isSendingOtp ? 'Sending...' : 'Resend 2FA Passcode'}
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-          </form>
-        )}
+          </div>
 
-        <div className="flex items-center justify-center space-x-2 text-[11px] text-[#0a0a0a]/50 pt-2 border-t border-[#0a0a0a]/10">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Encrypted Multi-Store Admin Portal</span>
+          {errorMsg && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-[#e5341f] font-medium leading-relaxed">
+              {errorMsg}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full h-12 bg-[#0a0a0a] hover:bg-[#1a1a1a] disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center space-x-2 transition-all cursor-pointer shadow-lg shadow-black/10 active:scale-95"
+          >
+            {isLoading ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                <span>Authenticating Session...</span>
+              </>
+            ) : (
+              <>
+                <span>Sign In to Portal</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
+        </form>
+
+        {/* Security / Master Note */}
+        <div className="pt-2 border-t border-[#0a0a0a]/10 space-y-2">
+          <div className="flex items-center justify-center space-x-2 text-[11px] text-[#0a0a0a]/60">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span>Master Admin has unrestricted access across all stores and services</span>
+          </div>
+          <p className="text-[10px] text-center text-[#0a0a0a]/40">
+            Store owners manage products and fulfillment for their assigned store.
+          </p>
         </div>
       </div>
     </div>

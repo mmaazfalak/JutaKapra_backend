@@ -32,6 +32,11 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onOpenMobileMenu }) =>
     isSidebarCollapsed,
     setIsCommandKOpen,
     activeAdminModule,
+    setActiveAdminModule,
+    adminRole,
+    currentStoreId,
+    setCurrentStoreId,
+    stores,
     logoutAdmin,
     navigateTo,
     addToast,
@@ -281,6 +286,25 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onOpenMobileMenu }) =>
             </React.Fragment>
           ))}
         </div>
+
+        {/* Master Admin / Store Scope Pill */}
+        {adminRole === 'super_admin' ? (
+          <button
+            onClick={() => {
+              setActiveAdminModule('stores');
+              setCurrentStoreId(null);
+            }}
+            className="hidden lg:flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/25 transition-all cursor-pointer shadow-sm ml-2"
+            title="Master Admin: Unrestricted access across all stores"
+          >
+            <span>👑 Master Admin</span>
+            <span className="text-[10px] text-blue-300 font-normal">({stores.length} Stores)</span>
+          </button>
+        ) : (
+          <span className="hidden lg:inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 ml-2">
+            <span>🏪 {stores.find((s) => s.id === currentStoreId)?.name || 'Store Portal'}</span>
+          </span>
+        )}
       </div>
 
       {/* Center: Quick Search Trigger (max-w-[576px]) */}

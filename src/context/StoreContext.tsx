@@ -470,7 +470,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const [isCommandKOpen, setIsCommandKOpen] = useState<boolean>(false);
-  const [activeAdminModule, setActiveAdminModule] = useState<string>('dashboard');
+  const [activeAdminModule, setActiveAdminModule] = useState<string>('stores');
 
   const toggleThemeMode = () => {
     setThemeMode((prev) => {
@@ -3520,6 +3520,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setIsAdminLoggedIn(true);
       setAdminRole('super_admin');
       setCurrentStoreId(null);
+      setActiveAdminModule('stores');
       try {
         localStorage.setItem(STORAGE_KEYS.ADMIN, 'true');
         localStorage.setItem(STORAGE_KEYS.ADMIN_ROLE, 'super_admin');
@@ -3527,8 +3528,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       } catch {}
       addToast({
         type: 'success',
-        title: 'Super Admin Authenticated',
-        message: 'Welcome back to Juta Kapra Operations Switchboard.',
+        title: 'Master Admin Authenticated',
+        message: 'Welcome back to Juta Kapra Operations Switchboard. Store Management loaded.',
       });
       return true;
     }
@@ -3547,6 +3548,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           setIsAdminLoggedIn(true);
           setAdminRole('super_admin');
           setCurrentStoreId(null);
+          setActiveAdminModule('stores');
           try {
             localStorage.setItem(STORAGE_KEYS.ADMIN, 'true');
             localStorage.setItem(STORAGE_KEYS.ADMIN_ROLE, 'super_admin');
@@ -3556,8 +3558,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           UnifiedStorage.saveUserProfile(user);
           addToast({
             type: 'success',
-            title: 'Super Admin Authenticated',
-            message: 'Welcome back to Juta Kapra Operations Switchboard.',
+            title: 'Master Admin Authenticated',
+            message: 'Welcome back to Juta Kapra Operations Switchboard. Store Management loaded.',
           });
           return true;
         }

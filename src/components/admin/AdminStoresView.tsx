@@ -223,6 +223,16 @@ export const AdminStoresView: React.FC = () => {
     });
   };
 
+  const handleSwitchToStoreOrders = (storeId: string) => {
+    setCurrentStoreId(storeId);
+    setActiveAdminModule('orders');
+    addToast({
+      type: 'info',
+      title: 'Store Orders & Deliveries',
+      message: `Now managing fulfillment and deliveries for ${stores.find((s) => s.id === storeId)?.name || 'selected store'}.`,
+    });
+  };
+
   const handleSyncSupabase = async () => {
     setIsSyncing(true);
     try {
@@ -245,6 +255,43 @@ export const AdminStoresView: React.FC = () => {
 
   return (
     <div className="space-y-6 w-full font-sans text-white">
+      {/* Master Admin Notice Banner */}
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-950/60 via-indigo-950/40 to-slate-900 border border-blue-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg shadow-md shrink-0">
+            👑
+          </div>
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="font-black text-sm text-white tracking-wide">
+                Master Admin Portal (mmaazfalak@icloud.com)
+              </span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                Full Authority
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5">
+              You have complete unrestricted access to all stores, products, inventory, deliveries, and settings.
+            </p>
+          </div>
+        </div>
+        {currentStoreId && (
+          <button
+            onClick={() => {
+              setCurrentStoreId(null);
+              addToast({
+                type: 'info',
+                title: 'Global Master View Restored',
+                message: 'Viewing all stores across the entire platform.',
+              });
+            }}
+            className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white border border-white/10 transition-colors self-start sm:self-auto cursor-pointer"
+          >
+            Clear Store Focus
+          </button>
+        )}
+      </div>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -514,13 +561,23 @@ export const AdminStoresView: React.FC = () => {
                   )}
                 </button>
 
-                <button
-                  onClick={() => handleSwitchToStoreProducts(store.id)}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow-md shadow-blue-600/20"
-                >
-                  <Package className="w-3.5 h-3.5" />
-                  <span>Manage Store Products</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => handleSwitchToStoreProducts(store.id)}
+                    className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow-md shadow-blue-600/20"
+                  >
+                    <Package className="w-3.5 h-3.5" />
+                    <span>Products ({stats.totalProducts})</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleSwitchToStoreOrders(store.id)}
+                    className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold border border-slate-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                  >
+                    <Store className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Orders &amp; Deliveries</span>
+                  </button>
+                </div>
               </div>
             </div>
           );
