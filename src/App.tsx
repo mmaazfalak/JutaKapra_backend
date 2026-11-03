@@ -7,6 +7,8 @@ import { CommandKModal } from './components/CommandKModal';
 import { ToastContainer } from './components/ToastContainer';
 import { ExternalLink, ShieldCheck } from 'lucide-react';
 
+const FRONTEND_URL = (import.meta as any).env?.VITE_FRONTEND_URL || 'https://jutakaprafrontend.vercel.app';
+
 const AdminPortalShell: React.FC = () => {
   const { currentView, setCurrentView, themeMode, isAdminAuthenticated } = useStore();
 
@@ -26,12 +28,12 @@ const AdminPortalShell: React.FC = () => {
             <span>Juta Kapra — Management Backend</span>
           </div>
           <a
-            href="https://jutakaprafrontend.vercel.app/"
+            href={FRONTEND_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center space-x-1 hover:text-[#e5341f] transition-colors"
           >
-            <span>Storefront</span>
+            <span>Customer Storefront</span>
             <ExternalLink className="w-3 h-3" />
           </a>
         </div>

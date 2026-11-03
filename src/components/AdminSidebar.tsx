@@ -217,7 +217,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       {(!isSidebarCollapsed || isMobileView) && (
         <div className="px-3 py-1.5 border-t border-dashed border-neutral-700/50">
           <a
-            href="https://jutakaprafrontend.vercel.app/"
+            href={(import.meta as any).env?.VITE_FRONTEND_URL || 'https://jutakaprafrontend.vercel.app'}
             target="_blank"
             rel="noopener noreferrer"
             className={`flex items-center space-x-2 text-xs py-2 px-2.5 rounded-lg transition-colors ${isDark ? 'text-neutral-400 hover:text-white hover:bg-[#1a202c]' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'}`}
