@@ -443,7 +443,11 @@ export const fetchSupabaseStores = async (): Promise<StoreAccount[]> => {
       .order('created_at', { ascending: false });
 
     if (error) {
-      // Table might not exist yet or connection error
+      // Table might not exist yet in fresh database
+      if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+        console.info('[Supabase] stores table not detected yet. Run supabase_master_schema.sql in Supabase SQL Editor.');
+        return null;
+      }
       console.warn('Supabase fetch stores notice:', error.message);
       return [];
     }

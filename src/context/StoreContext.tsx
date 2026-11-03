@@ -557,6 +557,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       const remoteStores = await fetchSupabaseStores();
+      if (remoteStores === null) {
+        // Table not created yet in Supabase
+        return {
+          success: true,
+          count: stores.length,
+          message: 'Local store entities active. Supabase schema execution pending.',
+        };
+      }
+
       if (remoteStores && remoteStores.length > 0) {
         setStores((prev) => {
           const mergedMap = new Map<string, StoreAccount>();
