@@ -305,6 +305,11 @@ export interface StoreAccount {
   createdAt: string;
   logoUrl?: string;
   description?: string;
+  defaultCourier?: string; // e.g. 'TCS', 'Leopards', 'Trax', 'Call Courier'
+  payoutAccountTitle?: string;
+  payoutBankName?: string;
+  payoutIbanOrPhone?: string;
+  badge?: string; // e.g. 'Verified Vault', 'Vintage Archive', 'Official Partner'
 }
 
 export interface SupabaseStore {

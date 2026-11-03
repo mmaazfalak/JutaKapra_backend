@@ -22,6 +22,7 @@ import {
   X,
   Shield,
   KeyRound,
+  Zap,
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { PaymentGatewayConfig, PaymentGatewayType } from '../types';
@@ -143,6 +144,12 @@ export const PaymentMethodsManager: React.FC = () => {
         payload: JSON.stringify({ title: formTitle, provider: formProviderName }),
         adminUser: 'Principal Admin (Root)',
       });
+
+      addToast({
+        type: 'success',
+        title: 'Payment Gateway Updated',
+        message: `${formTitle} settings successfully updated.`,
+      });
     } else {
       addPaymentGateway({
         type: formType,
@@ -169,6 +176,12 @@ export const PaymentMethodsManager: React.FC = () => {
         httpStatusCode: 201,
         payload: JSON.stringify({ title: formTitle, provider: formProviderName }),
         adminUser: 'Principal Admin (Root)',
+      });
+
+      addToast({
+        type: 'success',
+        title: 'Payment Gateway Added',
+        message: `${formTitle} configured and active for checkout.`,
       });
     }
 
@@ -211,6 +224,15 @@ export const PaymentMethodsManager: React.FC = () => {
     return '•••• ' + str.slice(-visibleChars);
   };
 
+  const handleCopyText = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    addToast({
+      type: 'info',
+      title: `${label} Copied`,
+      message: `${text} copied to clipboard.`,
+    });
+  };
+
   return (
     <div className="space-y-6 animate-fade-in font-sans text-white">
       {/* Page Header */}
@@ -226,49 +248,99 @@ export const PaymentMethodsManager: React.FC = () => {
             </span>
           </div>
           <p className={`text-xs mt-1 ${textMuted}`}>
-            Sensitive bank details and API credentials are cryptographically masked. Configuration changes require Principal Admin confirmation.
+            Configure bank accounts, mobile wallets (JazzCash/Easypaisa), and Cash on Delivery with individual transaction limits.
           </p>
         </div>
 
-        <div className="flex items-center space-x-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => handleOpenAddModal('bank')}
-            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-lg shadow-blue-600/20 cursor-pointer flex items-center space-x-1.5"
+            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-lg shadow-blue-600/20 cursor-pointer flex items-center space-x-1.5 active:scale-95"
           >
             <Plus className="w-4 h-4" />
             <span>Add Bank Account</span>
+          </button>
+          <button
+            onClick={() => handleOpenAddModal('easypaisa')}
+            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-lg shadow-emerald-600/20 cursor-pointer flex items-center space-x-1.5 active:scale-95"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Wallet</span>
           </button>
           <button
             onClick={() => handleOpenAddModal('custom')}
             className="px-3.5 py-2 rounded-xl border border-inherit text-xs font-semibold hover:bg-white/5 transition-colors cursor-pointer flex items-center space-x-1.5"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Custom Gateway</span>
+            <span>Add Custom</span>
           </button>
         </div>
       </div>
 
-      {/* Payment Gateways Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {paymentGateways.map((gw) => {
-          const isRevealed = !!revealedGateways[gw.id];
+      {/* Overview Metric Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className={`p-4 rounded-xl border ${cardBg}`}>
+          <span className={`text-[11px] font-semibold ${textMuted} block`}>Configured Gateways</span>
+          <span className="text-2xl font-bold font-mono text-white mt-1 block">{paymentGateways.length}</span>
+          <span className="text-[10px] text-slate-400 mt-1 block">Supported checkout channels</span>
+        </div>
+        <div className={`p-4 rounded-xl border ${cardBg}`}>
+          <span className={`text-[11px] font-semibold ${textMuted} block`}>Active in Checkout</span>
+          <span className="text-2xl font-bold font-mono text-emerald-400 mt-1 block">
+            {paymentGateways.filter((g) => g.isEnabled).length}
+          </span>
+          <span className="text-[10px] text-emerald-400/80 mt-1 block">Visible to buyers</span>
+        </div>
+        <div className={`p-4 rounded-xl border ${cardBg}`}>
+          <span className={`text-[11px] font-semibold ${textMuted} block`}>Encrypted Accounts</span>
+          <span className="text-2xl font-bold font-mono text-blue-400 mt-1 block">
+            {paymentGateways.filter((g) => g.accountNumber || g.iban).length}
+          </span>
+          <span className="text-[10px] text-blue-400/80 mt-1 block">Bank &amp; mobile numbers</span>
+        </div>
+        <div className={`p-4 rounded-xl border ${cardBg}`}>
+          <span className={`text-[11px] font-semibold ${textMuted} block`}>Security Enclave</span>
+          <span className="text-sm font-bold font-mono text-emerald-400 mt-2 block flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4" /> 100% Protected
+          </span>
+          <span className="text-[10px] text-slate-400 mt-1 block">Audit trail recorded</span>
+        </div>
+      </div>
 
-          return (
-            <div key={gw.id} className={`p-6 rounded-2xl border shadow-sm ${cardBg} space-y-4 relative`}>
-              {/* Card Top Row */}
-              <div className="flex items-start justify-between">
-                <div className="flex items-center space-x-3">
+      {/* PAYMENT GATEWAYS IN ROWS (Enterprise Table Row Layout) */}
+      <div className={`rounded-2xl border ${cardBg} overflow-hidden shadow-xl`}>
+        {/* Table Header Row (Desktop) */}
+        <div className="hidden xl:grid grid-cols-12 gap-3 px-5 py-3.5 bg-black/35 border-b border-inherit text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          <div className="col-span-3">Method &amp; Provider</div>
+          <div className="col-span-3">Account Title &amp; Details</div>
+          <div className="col-span-3">Order Limits &amp; Notes</div>
+          <div className="col-span-2">Checkout Status</div>
+          <div className="col-span-1 text-right">Actions</div>
+        </div>
+
+        {/* Rows List */}
+        <div className="divide-y divide-slate-800/80">
+          {paymentGateways.map((gw) => {
+            const isRevealed = !!revealedGateways[gw.id];
+
+            return (
+              <div
+                key={gw.id}
+                className="p-4 sm:p-5 hover:bg-white/[0.02] transition-colors flex flex-col xl:grid xl:grid-cols-12 gap-4 items-start xl:items-center"
+              >
+                {/* 1. Method & Provider (Cols 1-3) */}
+                <div className="xl:col-span-3 flex items-start space-x-3 w-full">
                   <div
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg ${
+                    className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-lg shrink-0 shadow-md ${
                       gw.type === 'cod'
-                        ? 'bg-amber-500/10 text-amber-500'
+                        ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
                         : gw.type === 'easypaisa'
-                        ? 'bg-emerald-500/10 text-emerald-500'
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                         : gw.type === 'jazzcash'
-                        ? 'bg-red-500/10 text-red-500'
+                        ? 'bg-red-500/10 text-red-400 border border-red-500/20'
                         : gw.type === 'bank'
-                        ? 'bg-blue-500/10 text-blue-500'
-                        : 'bg-purple-500/10 text-purple-500'
+                        ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                        : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
                     }`}
                   >
                     {gw.type === 'cod' && <Banknote className="w-5 h-5" />}
@@ -278,16 +350,98 @@ export const PaymentMethodsManager: React.FC = () => {
                     {gw.type === 'stripe' && <CreditCard className="w-5 h-5" />}
                     {gw.type === 'custom' && <CreditCard className="w-5 h-5" />}
                   </div>
-                  <div>
-                    <h4 className="font-bold text-base text-white">{gw.title}</h4>
-                    <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">
-                      {gw.providerName} • ID: {gw.id}
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-bold text-sm text-white tracking-tight truncate">{gw.title}</h4>
+                    <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mt-0.5">
+                      {gw.providerName} • <span className="text-slate-500">{gw.id}</span>
+                    </span>
+                    <span className="inline-block mt-1 text-[9px] font-semibold px-2 py-0.5 rounded uppercase tracking-wider bg-black/30 border border-slate-700 text-slate-300">
+                      {gw.type.toUpperCase()}
                     </span>
                   </div>
                 </div>
 
-                {/* Master Switch */}
-                <div className="flex items-center space-x-2">
+                {/* 2. Account Credentials & Details (Cols 4-6) */}
+                <div className="xl:col-span-3 text-xs space-y-1.5 w-full bg-black/20 xl:bg-transparent p-3 xl:p-0 rounded-xl font-mono">
+                  {gw.type === 'cod' ? (
+                    <div className="font-sans text-xs text-slate-300">
+                      <span className="font-semibold block text-amber-400">Cash on Delivery</span>
+                      <span className="text-[11px] text-slate-400 block mt-0.5">
+                        Rider collects payment at customer doorstep.
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      {gw.accountTitle && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-400 text-[11px] font-sans">Title:</span>
+                          <span className="font-bold text-white truncate max-w-[180px]">
+                            {isRevealed ? gw.accountTitle : maskString(gw.accountTitle, 3)}
+                          </span>
+                        </div>
+                      )}
+
+                      {gw.accountNumber && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-400 text-[11px] font-sans">
+                            {gw.type === 'bank' ? 'Account #:' : 'Wallet #:'}
+                          </span>
+                          <div className="flex items-center space-x-1">
+                            <span className="font-bold text-emerald-400">
+                              {isRevealed ? gw.accountNumber : maskString(gw.accountNumber, 4)}
+                            </span>
+                            {isRevealed && (
+                              <button
+                                onClick={() => handleCopyText(gw.accountNumber || '', 'Account Number')}
+                                className="text-slate-400 hover:text-white cursor-pointer"
+                                title="Copy account number"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {gw.iban && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-400 text-[11px] font-sans">IBAN:</span>
+                          <span className="font-bold text-blue-400 text-[11px] truncate max-w-[170px]">
+                            {isRevealed ? gw.iban : maskString(gw.iban, 4)}
+                          </span>
+                        </div>
+                      )}
+
+                      {gw.bankName && (
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-400 font-sans">Bank:</span>
+                          <span className="text-slate-300 font-semibold">{gw.bankName}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* 3. Order Limits & Instructions (Cols 7-9) */}
+                <div className="xl:col-span-3 text-xs w-full space-y-1">
+                  <div className="flex items-center justify-between xl:justify-start gap-2">
+                    <span className="text-[11px] text-slate-400">Limits:</span>
+                    <span className="font-mono font-bold text-xs text-white">
+                      {formatPKR(gw.minOrderLimit || 0)} - {formatPKR(gw.maxOrderLimit || 100000)}
+                    </span>
+                  </div>
+
+                  {gw.disclaimerNote ? (
+                    <p className="text-[11px] text-slate-300 line-clamp-2 bg-black/20 p-2 rounded-lg">
+                      {gw.disclaimerNote}
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-slate-500 italic">No checkout disclaimer note set</p>
+                  )}
+                </div>
+
+                {/* 4. Checkout Status Toggle (Cols 10-11) */}
+                <div className="xl:col-span-2 flex items-center justify-between xl:justify-start gap-3 w-full">
                   <span
                     className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                       gw.isEnabled
@@ -295,8 +449,9 @@ export const PaymentMethodsManager: React.FC = () => {
                         : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
                     }`}
                   >
-                    {gw.isEnabled ? '● Active in Checkout' : '○ Disabled'}
+                    {gw.isEnabled ? '● Active' : '○ Disabled'}
                   </span>
+
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
                       type="checkbox"
@@ -307,142 +462,69 @@ export const PaymentMethodsManager: React.FC = () => {
                     <div className="w-10 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
                   </label>
                 </div>
-              </div>
 
-              {/* Secure Credentials Render (Masked by default) */}
-              <div className="space-y-2.5 text-xs pt-3 border-t border-inherit">
-                {gw.type === 'cod' && (
-                  <div className="space-y-1 text-xs">
-                    <div className="flex justify-between text-[11px]">
-                      <span className={textMuted}>Order Value Limits:</span>
-                      <span className="font-bold font-mono text-white">
-                        {formatPKR(gw.minOrderLimit || 0)} - {formatPKR(gw.maxOrderLimit || 100000)}
-                      </span>
-                    </div>
-                    {gw.disclaimerNote && (
-                      <p className="text-[11px] text-amber-400 bg-amber-500/10 p-2 rounded-lg mt-1">
-                        Note: {gw.disclaimerNote}
-                      </p>
-                    )}
-                  </div>
-                )}
+                {/* 5. Row Actions (Col 12) */}
+                <div className="xl:col-span-1 flex items-center justify-start xl:justify-end space-x-1.5 w-full">
+                  {gw.type !== 'cod' && (
+                    <button
+                      onClick={() => toggleReveal(gw.id)}
+                      title={isRevealed ? 'Mask Credentials' : 'Reveal Masked Credentials'}
+                      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                    >
+                      {isRevealed ? <EyeOff className="w-4 h-4 text-amber-400" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  )}
 
-                {(gw.type === 'easypaisa' || gw.type === 'jazzcash') && (
-                  <div className="space-y-1.5 font-mono text-xs">
-                    <div className="flex justify-between">
-                      <span className={textMuted}>Account Title:</span>
-                      <span className="font-bold text-white">
-                        {isRevealed ? gw.accountTitle || 'N/A' : maskString(gw.accountTitle, 3)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className={textMuted}>Wallet Number:</span>
-                      <span className="font-bold text-emerald-400">
-                        {isRevealed ? gw.accountNumber || 'N/A' : maskString(gw.accountNumber, 4)}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {gw.type === 'bank' && (
-                  <div className="space-y-1.5 font-mono text-xs">
-                    <div className="flex justify-between">
-                      <span className={textMuted}>Bank Institution:</span>
-                      <span className="font-bold text-white">{gw.bankName || gw.providerName}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className={textMuted}>Account Title:</span>
-                      <span className="font-bold text-white">
-                        {isRevealed ? gw.accountTitle || 'N/A' : maskString(gw.accountTitle, 3)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className={textMuted}>Account Number:</span>
-                      <span className="font-bold text-slate-200">
-                        {isRevealed ? gw.accountNumber || 'N/A' : maskString(gw.accountNumber, 4)}
-                      </span>
-                    </div>
-                    {gw.iban && (
-                      <div className="flex justify-between">
-                        <span className={textMuted}>IBAN Code:</span>
-                        <span className="font-bold text-blue-400">
-                          {isRevealed ? gw.iban : maskString(gw.iban, 4)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {gw.type === 'stripe' && (
-                  <div className="space-y-1.5 font-mono text-xs">
-                    <div className="flex justify-between">
-                      <span className={textMuted}>Publishable Key:</span>
-                      <span className="font-bold text-slate-300">
-                        {gw.publishableKey ? maskString(gw.publishableKey, 6) : 'pk_live_••••••••••••'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className={textMuted}>Secret Key Status:</span>
-                      <span className="text-emerald-400 font-bold">● AES-256 Vault Encrypted</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Gateway Health & Last Updated */}
-                <div className="flex items-center justify-between text-[10px] text-slate-500 pt-2 border-t border-inherit">
-                  <span className="flex items-center gap-1 text-emerald-400 font-medium">
-                    <Activity className="w-3 h-3" />
-                    <span>Health: Live &amp; Nominal</span>
-                  </span>
-                  <span className="font-mono">
-                    Updated {new Date(gw.updatedAt).toLocaleDateString()}
-                  </span>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center justify-between pt-2 border-t border-inherit">
-                <button
-                  type="button"
-                  onClick={() => toggleReveal(gw.id)}
-                  className="px-2.5 py-1.5 rounded-lg bg-black/20 hover:bg-black/30 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
-                >
-                  {isRevealed ? <EyeOff className="w-3.5 h-3.5 text-amber-400" /> : <Eye className="w-3.5 h-3.5 text-blue-400" />}
-                  <span>{isRevealed ? 'Mask Details' : 'Reveal (Admin)'}</span>
-                </button>
-
-                <div className="flex items-center space-x-1.5">
                   <button
                     onClick={() => handleOpenEditModal(gw)}
-                    className="p-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 transition-colors cursor-pointer"
                     title="Edit Gateway Settings"
+                    className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer"
                   >
-                    <Edit className="w-3.5 h-3.5" />
+                    <Edit className="w-4 h-4" />
                   </button>
+
                   <button
                     onClick={() => setConfirmDeleteGateway(gw)}
-                    className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors cursor-pointer"
                     title="Delete Gateway"
+                    className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors cursor-pointer"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
+            );
+          })}
+
+          {paymentGateways.length === 0 && (
+            <div className="p-12 text-center space-y-3">
+              <CreditCard className="w-10 h-10 text-slate-500 mx-auto" />
+              <h4 className="font-bold text-sm text-white">No Payment Gateways Configured</h4>
+              <p className={`text-xs ${textMuted} max-w-sm mx-auto`}>
+                Add at least one payment method (Bank Account, EasyPaisa, JazzCash, or COD) to enable customer checkout.
+              </p>
+              <button
+                onClick={() => handleOpenAddModal('bank')}
+                className="px-4 py-2 rounded-xl bg-blue-600 text-xs font-bold text-white hover:bg-blue-500 transition-colors cursor-pointer"
+              >
+                Add First Payment Gateway
+              </button>
             </div>
-          );
-        })}
+          )}
+        </div>
       </div>
 
-      {/* Edit / Add Modal */}
+      {/* MODAL: CREATE OR EDIT PAYMENT GATEWAY */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className={`w-full max-w-xl rounded-2xl shadow-2xl border ${cardBg} max-h-[92vh] overflow-y-auto p-6 space-y-5 custom-scrollbar text-white`}>
-            <div className="flex items-center justify-between border-b border-inherit pb-3">
-              <h3 className="text-base font-bold flex items-center gap-2">
-                <Shield className="w-4 h-4 text-emerald-400" />
-                <span>{editingGateway ? 'Edit Payment Gateway' : 'Add Payment Gateway'}</span>
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} className="p-1 rounded-lg text-slate-400 hover:text-white">
+          <div className={`w-full max-w-xl rounded-2xl shadow-2xl border ${cardBg} p-6 space-y-4 text-white max-h-[92vh] overflow-y-auto custom-scrollbar`}>
+            <div className="flex items-center justify-between border-b border-inherit pb-3 font-sans">
+              <div>
+                <h3 className="font-bold text-base">
+                  {editingGateway ? `Edit Gateway: ${editingGateway.title}` : `Configure New ${formType.toUpperCase()} Gateway`}
+                </h3>
+                <span className="text-[11px] text-slate-400">Settings will apply dynamically to the live checkout switchboard</span>
+              </div>
+              <button onClick={() => setIsModalOpen(false)} className="p-1 rounded-lg text-slate-400 hover:text-white cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -556,13 +638,13 @@ export const PaymentMethodsManager: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-lg border border-inherit font-semibold text-slate-300 hover:text-white"
+                  className="px-4 py-2 rounded-lg border border-inherit font-semibold text-slate-300 hover:text-white cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold cursor-pointer"
+                  className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold cursor-pointer shadow-md shadow-blue-600/30 active:scale-95"
                 >
                   Review &amp; Save
                 </button>
@@ -591,14 +673,14 @@ export const PaymentMethodsManager: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setConfirmSaveOpen(false)}
-                className="px-4 py-2 rounded-lg border border-inherit font-semibold text-slate-300 hover:text-white text-xs"
+                className="px-4 py-2 rounded-lg border border-inherit font-semibold text-slate-300 hover:text-white text-xs cursor-pointer"
               >
                 Go Back
               </button>
               <button
                 type="button"
                 onClick={handleConfirmSave}
-                className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer"
+                className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer active:scale-95"
               >
                 Confirm &amp; Apply
               </button>
@@ -626,7 +708,7 @@ export const PaymentMethodsManager: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setConfirmDeleteGateway(null)}
-                className="px-4 py-2 rounded-lg border border-inherit font-semibold text-slate-300 hover:text-white text-xs"
+                className="px-4 py-2 rounded-lg border border-inherit font-semibold text-slate-300 hover:text-white text-xs cursor-pointer"
               >
                 Cancel
               </button>
@@ -642,9 +724,14 @@ export const PaymentMethodsManager: React.FC = () => {
                     payload: JSON.stringify({ title: confirmDeleteGateway.title }),
                     adminUser: 'Principal Admin (Root)',
                   });
+                  addToast({
+                    type: 'info',
+                    title: 'Gateway Removed',
+                    message: `${confirmDeleteGateway.title} deleted from checkout options.`,
+                  });
                   setConfirmDeleteGateway(null);
                 }}
-                className="px-5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs cursor-pointer"
+                className="px-5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs cursor-pointer active:scale-95"
               >
                 Delete Method
               </button>

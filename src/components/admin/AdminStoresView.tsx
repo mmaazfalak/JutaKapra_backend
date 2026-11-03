@@ -27,6 +27,11 @@ import {
   Database,
   RefreshCw,
   Cloud,
+  Truck,
+  Download,
+  CreditCard,
+  Building,
+  Check,
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { StoreAccount } from '../../types';
@@ -53,6 +58,7 @@ export const AdminStoresView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'suspended'>('all');
   const [filterVisibility, setFilterVisibility] = useState<'all' | 'visible' | 'hidden'>('all');
+  const [revealedPasscodes, setRevealedPasscodes] = useState<{ [id: string]: boolean }>({});
 
   // Modal States
   const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
@@ -74,6 +80,11 @@ export const AdminStoresView: React.FC = () => {
   const [formStatus, setFormStatus] = useState<'active' | 'suspended'>('active');
   const [formDescription, setFormDescription] = useState('');
   const [formIsHidden, setFormIsHidden] = useState(false);
+  const [formDefaultCourier, setFormDefaultCourier] = useState('TCS Express');
+  const [formPayoutAccountTitle, setFormPayoutAccountTitle] = useState('');
+  const [formPayoutBankName, setFormPayoutBankName] = useState('Meezan Bank');
+  const [formPayoutIbanOrPhone, setFormPayoutIbanOrPhone] = useState('');
+  const [formBadge, setFormBadge] = useState('Verified Vault');
 
   const isDark = themeMode === 'dark';
   const cardBg = isDark ? 'bg-[#12151c] border-[#232833]' : 'bg-white border-slate-200';
@@ -128,8 +139,13 @@ export const AdminStoresView: React.FC = () => {
     setFormAddress('');
     setFormCommissionRate(10);
     setFormStatus('active');
-    setFormDescription('Archival streetwear & curated vintage supplier boutique.');
+    setFormDescription('Curated vintage footwear and thrift streetwear partner.');
     setFormIsHidden(false);
+    setFormDefaultCourier('TCS Express');
+    setFormPayoutAccountTitle('');
+    setFormPayoutBankName('Meezan Bank');
+    setFormPayoutIbanOrPhone('');
+    setFormBadge('Verified Vault');
     setIsStoreModalOpen(true);
   };
 
@@ -147,6 +163,11 @@ export const AdminStoresView: React.FC = () => {
     setFormStatus(store.status);
     setFormDescription(store.description || '');
     setFormIsHidden(Boolean(store.isHidden));
+    setFormDefaultCourier(store.defaultCourier || 'TCS Express');
+    setFormPayoutAccountTitle(store.payoutAccountTitle || '');
+    setFormPayoutBankName(store.payoutBankName || 'Meezan Bank');
+    setFormPayoutIbanOrPhone(store.payoutIbanOrPhone || '');
+    setFormBadge(store.badge || 'Verified Vault');
     setIsStoreModalOpen(true);
   };
 
@@ -168,35 +189,39 @@ export const AdminStoresView: React.FC = () => {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)+/g, '');
 
+    const payload: Partial<StoreAccount> = {
+      name: formName.trim(),
+      slug: cleanSlug,
+      ownerName: formOwnerName.trim() || 'Store Manager',
+      ownerEmail: formOwnerEmail.trim().toLowerCase(),
+      ownerPhone: formOwnerPhone.trim(),
+      passcode: formPasscode.trim(),
+      city: formCity.trim(),
+      address: formAddress.trim(),
+      commissionRate: Number(formCommissionRate),
+      status: formStatus,
+      description: formDescription.trim(),
+      isHidden: formIsHidden,
+      defaultCourier: formDefaultCourier,
+      payoutAccountTitle: formPayoutAccountTitle.trim(),
+      payoutBankName: formPayoutBankName.trim(),
+      payoutIbanOrPhone: formPayoutIbanOrPhone.trim(),
+      badge: formBadge,
+    };
+
     if (editingStoreId) {
-      updateStore(editingStoreId, {
-        name: formName.trim(),
-        slug: cleanSlug,
-        ownerName: formOwnerName.trim() || 'Store Manager',
-        ownerEmail: formOwnerEmail.trim().toLowerCase(),
-        ownerPhone: formOwnerPhone.trim(),
-        passcode: formPasscode.trim(),
-        city: formCity.trim(),
-        address: formAddress.trim(),
-        commissionRate: Number(formCommissionRate),
-        status: formStatus,
-        description: formDescription.trim(),
-        isHidden: formIsHidden,
+      updateStore(editingStoreId, payload);
+      addToast({
+        type: 'success',
+        title: 'Store Updated',
+        message: `${formName} configuration successfully updated.`,
       });
     } else {
-      addStore({
-        name: formName.trim(),
-        slug: cleanSlug,
-        ownerName: formOwnerName.trim() || 'Store Manager',
-        ownerEmail: formOwnerEmail.trim().toLowerCase(),
-        ownerPhone: formOwnerPhone.trim(),
-        passcode: formPasscode.trim(),
-        city: formCity.trim(),
-        address: formAddress.trim(),
-        commissionRate: Number(formCommissionRate),
-        status: formStatus,
-        description: formDescription.trim(),
-        isHidden: formIsHidden,
+      addStore(payload as any);
+      addToast({
+        type: 'success',
+        title: 'Store Created',
+        message: `New store ${formName} registered with ${formCommissionRate}% commission.`,
       });
     }
 
@@ -230,6 +255,72 @@ export const AdminStoresView: React.FC = () => {
       type: 'info',
       title: 'Store Orders & Deliveries',
       message: `Now managing fulfillment and deliveries for ${stores.find((s) => s.id === storeId)?.name || 'selected store'}.`,
+    });
+  };
+
+  const handleTogglePasscodeReveal = (storeId: string) => {
+    setRevealedPasscodes((prev) => ({ ...prev, [storeId]: !prev[storeId] }));
+  };
+
+  const handleToggleStoreStatus = (store: StoreAccount) => {
+    const nextStatus = store.status === 'active' ? 'suspended' : 'active';
+    updateStore(store.id, { status: nextStatus });
+    addToast({
+      type: nextStatus === 'active' ? 'success' : 'info',
+      title: `Store ${nextStatus === 'active' ? 'Activated' : 'Suspended'}`,
+      message: `${store.name} account is now ${nextStatus}.`,
+    });
+  };
+
+  const handleExportCsv = () => {
+    const headers = [
+      'Store ID',
+      'Store Name',
+      'City',
+      'Owner Name',
+      'Owner Email',
+      'Owner Phone',
+      'Passcode',
+      'Commission %',
+      'Default Courier',
+      'Status',
+      'Storefront Visibility',
+      'Total Products',
+      'Inventory Value (PKR)',
+    ];
+
+    const rows = stores.map((s) => {
+      const stats = getStoreStats(s.id);
+      return [
+        `"${s.id}"`,
+        `"${s.name}"`,
+        `"${s.city || 'Islamabad'}"`,
+        `"${s.ownerName}"`,
+        `"${s.ownerEmail}"`,
+        `"${s.ownerPhone || ''}"`,
+        `"${s.passcode || 'store123'}"`,
+        `"${s.commissionRate || 10}%"`,
+        `"${s.defaultCourier || 'TCS Express'}"`,
+        `"${s.status}"`,
+        `"${s.isHidden ? 'Hidden' : 'Live'}"`,
+        `"${stats.totalProducts}"`,
+        `"${stats.totalInventoryValue}"`,
+      ].join(',');
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `jutakapra_stores_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    addToast({
+      type: 'success',
+      title: 'Store Directory Exported',
+      message: `Downloaded directory for ${stores.length} store accounts as CSV.`,
     });
   };
 
@@ -271,25 +362,35 @@ export const AdminStoresView: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-0.5">
-              You have complete unrestricted access to all stores, products, inventory, deliveries, and settings.
+              You have complete unrestricted access across all stores, products, fulfillment, commissions, and passcodes.
             </p>
           </div>
         </div>
-        {currentStoreId && (
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {currentStoreId && (
+            <button
+              onClick={() => {
+                setCurrentStoreId(null);
+                addToast({
+                  type: 'info',
+                  title: 'Global Master View Restored',
+                  message: 'Viewing all stores across the entire platform.',
+                });
+              }}
+              className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition-all cursor-pointer shadow-sm"
+            >
+              Clear Focus (Show All)
+            </button>
+          )}
           <button
-            onClick={() => {
-              setCurrentStoreId(null);
-              addToast({
-                type: 'info',
-                title: 'Global Master View Restored',
-                message: 'Viewing all stores across the entire platform.',
-              });
-            }}
-            className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white border border-white/10 transition-colors self-start sm:self-auto cursor-pointer"
+            onClick={handleExportCsv}
+            className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white border border-white/10 transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Download store directory as CSV"
           >
-            Clear Store Focus
+            <Download className="w-3.5 h-3.5" />
+            <span>Export CSV</span>
           </button>
-        )}
+        </div>
       </div>
 
       {/* Header */}
@@ -315,11 +416,11 @@ export const AdminStoresView: React.FC = () => {
                   }`}
                 >
                   <Cloud className="w-3 h-3" />
-                  <span>{isSupabaseStoresSynced ? 'Supabase DB Synced' : 'Cloud DB Active'}</span>
+                  <span>{isSupabaseStoresSynced ? 'Supabase Synced' : 'Cloud DB Active'}</span>
                 </span>
               </div>
               <p className={`text-xs mt-0.5 ${textMuted}`}>
-                Manage independent store accounts saved in Supabase database with isolated vendor logins and company commission tracking.
+                Manage independent store accounts saved in Supabase database with isolated vendor logins, products, and courier shipping.
               </p>
             </div>
           </div>
@@ -400,7 +501,7 @@ export const AdminStoresView: React.FC = () => {
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs cursor-pointer"
               >
                 Clear
               </button>
@@ -433,358 +534,519 @@ export const AdminStoresView: React.FC = () => {
         </div>
       </div>
 
-      {/* Stores List Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {filteredStores.map((store) => {
-          const stats = getStoreStats(store.id);
-          const isCurrentActive = currentStoreId === store.id;
+      {/* STORES TABLE IN ROWS (High-Density Enterprise Row View) */}
+      <div className={`rounded-2xl border ${cardBg} overflow-hidden shadow-xl`}>
+        {/* Table Header Row (Desktop) */}
+        <div className="hidden xl:grid grid-cols-12 gap-3 px-5 py-3.5 bg-black/35 border-b border-inherit text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          <div className="col-span-3">Store &amp; Location</div>
+          <div className="col-span-3">Owner Contact &amp; Login</div>
+          <div className="col-span-2">Products &amp; Value</div>
+          <div className="col-span-2">Commission &amp; Shipping</div>
+          <div className="col-span-2 text-right">Master Actions</div>
+        </div>
 
-          return (
-            <div
-              key={store.id}
-              className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
-                isCurrentActive ? 'border-blue-500 ring-1 ring-blue-500/50' : cardBg
-              } p-5 space-y-4 shadow-sm hover:shadow-md`}
-            >
-              {/* Top Banner & Status */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start space-x-3">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 text-white flex items-center justify-center text-lg font-black shrink-0 shadow-md">
+        {/* Rows List */}
+        <div className="divide-y divide-slate-800/80">
+          {filteredStores.map((store) => {
+            const stats = getStoreStats(store.id);
+            const isCurrentActive = currentStoreId === store.id;
+            const isPasscodeRevealed = !!revealedPasscodes[store.id];
+
+            return (
+              <div
+                key={store.id}
+                className={`p-4 sm:p-5 transition-all duration-150 flex flex-col xl:grid xl:grid-cols-12 gap-4 items-start xl:items-center ${
+                  isCurrentActive ? 'bg-blue-950/20 border-l-4 border-l-blue-500' : 'hover:bg-white/[0.02]'
+                }`}
+              >
+                {/* 1. Store & Location (Cols 1-3) */}
+                <div className="xl:col-span-3 flex items-start space-x-3 w-full">
+                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 text-white flex items-center justify-center text-base font-black shrink-0 shadow-md">
                     {store.name.charAt(0)}
                   </div>
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <h4 className="font-bold text-base text-white tracking-tight">{store.name}</h4>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <h4 className="font-bold text-sm text-white tracking-tight truncate">{store.name}</h4>
                       {store.isHidden ? (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
-                          <EyeOff className="w-3 h-3" /> Products Hidden
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          Hidden
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
-                          <Eye className="w-3 h-3" /> Live
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          Live
+                        </span>
+                      )}
+                      {store.status === 'suspended' && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider bg-red-500/10 text-red-400 border border-red-500/20">
+                          Suspended
                         </span>
                       )}
                     </div>
-                    <p className={`text-xs flex items-center gap-1.5 mt-0.5 ${textMuted}`}>
-                      <MapPin className="w-3 h-3 text-slate-400" />
-                      <span>{store.city || 'Pakistan'}</span>
+                    <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-slate-500" />
+                        <span>{store.city || 'Islamabad'}</span>
+                      </span>
                       <span className="text-slate-600">•</span>
-                      <span className="font-mono text-[11px]">ID: {store.id}</span>
-                    </p>
+                      <span className="font-mono text-[10px] text-slate-500 truncate">{store.id}</span>
+                    </div>
+                    {store.badge && (
+                      <span className="inline-block mt-1 text-[9px] font-semibold px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                        ✨ {store.badge}
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-1.5 shrink-0">
-                  <button
-                    onClick={() => handleOpenEditStore(store)}
-                    title="Edit Store"
-                    className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setConfirmDeleteStore(store)}
-                    title="Delete Store"
-                    className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+                {/* 2. Owner & Credentials (Cols 4-6) */}
+                <div className="xl:col-span-3 text-xs space-y-1 w-full bg-black/20 xl:bg-transparent p-3 xl:p-0 rounded-xl">
+                  <div className="flex items-center justify-between xl:justify-start gap-2">
+                    <span className="font-semibold text-slate-200 flex items-center gap-1">
+                      <User className="w-3.5 h-3.5 text-blue-400" />
+                      <span>{store.ownerName}</span>
+                    </span>
+                    <button
+                      onClick={() => handleCopyCredentials(store)}
+                      className="text-[11px] font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Copy store owner login credentials"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Copy Login</span>
+                    </button>
+                  </div>
 
-              {/* Store Owner Contact & Access Box */}
-              <div className="p-3.5 rounded-xl bg-black/25 border border-inherit text-xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 text-slate-300">
-                    <User className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                    <span className="font-semibold text-white">{store.ownerName}</span>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20">
-                      Store Owner
+                  <div className="text-[11px] font-mono text-slate-400 truncate flex items-center gap-1.5">
+                    <Mail className="w-3 h-3 text-slate-500 shrink-0" />
+                    <span className="truncate">{store.ownerEmail}</span>
+                  </div>
+
+                  <div className="text-[11px] flex items-center justify-between text-slate-400 font-mono">
+                    <span className="flex items-center gap-1.5">
+                      <KeyRound className="w-3 h-3 text-slate-500" />
+                      <span>Passcode:</span>
+                      <span className="font-semibold text-emerald-400">
+                        {isPasscodeRevealed ? store.passcode || 'store123' : '••••••••'}
+                      </span>
+                    </span>
+                    <button
+                      onClick={() => handleTogglePasscodeReveal(store.id)}
+                      className="text-slate-500 hover:text-slate-300 cursor-pointer ml-1"
+                      title={isPasscodeRevealed ? 'Hide passcode' : 'Show passcode'}
+                    >
+                      {isPasscodeRevealed ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Products & Value (Cols 7-8) */}
+                <div className="xl:col-span-2 text-xs w-full">
+                  <div className="flex items-center justify-between xl:block">
+                    <span className="font-bold text-sm text-white font-mono">
+                      {stats.totalProducts} <span className="text-xs font-normal text-slate-400">Products</span>
+                    </span>
+                    <span className="text-[11px] font-mono text-emerald-400 font-bold block xl:mt-0.5">
+                      {formatPKR(stats.totalInventoryValue)}
                     </span>
                   </div>
-                  <button
-                    onClick={() => handleCopyCredentials(store)}
-                    className="text-[11px] font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer transition-colors"
-                  >
-                    <Copy className="w-3 h-3" /> Copy Login
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-400 pt-1 border-t border-slate-800">
-                  <div className="flex items-center gap-1.5 truncate">
-                    <Mail className="w-3 h-3 text-slate-500 shrink-0" />
-                    <span className="font-mono text-slate-300 truncate">{store.ownerEmail}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <KeyRound className="w-3 h-3 text-slate-500 shrink-0" />
-                    <span>Passcode: <span className="font-mono text-emerald-400 font-semibold">{store.passcode || 'store123'}</span></span>
+                  <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-2">
+                    <span>1-of-1: <strong className="text-amber-400">{stats.thrift1of1Count}</strong></span>
+                    <span>•</span>
+                    <span>Multi: <strong className="text-blue-400">{stats.multiStockCount}</strong></span>
+                    <span>•</span>
+                    <span>In-Stock: <strong className="text-slate-200">{stats.inStockCount}</strong></span>
                   </div>
                 </div>
-              </div>
 
-              {/* Inventory Breakdown Metrics */}
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                <div className="p-2.5 rounded-xl bg-black/20 border border-inherit text-center">
-                  <span className={`text-[10px] font-semibold ${textMuted} block`}>Total Products</span>
-                  <span className="text-base font-bold font-mono text-white mt-0.5 block">{stats.totalProducts}</span>
-                </div>
-                <div className="p-2.5 rounded-xl bg-black/20 border border-inherit text-center">
-                  <span className={`text-[10px] font-semibold ${textMuted} block`}>1-of-1 Thrift</span>
-                  <span className="text-base font-bold font-mono text-amber-400 mt-0.5 block">{stats.thrift1of1Count}</span>
-                </div>
-                <div className="p-2.5 rounded-xl bg-black/20 border border-inherit text-center">
-                  <span className={`text-[10px] font-semibold ${textMuted} block`}>Multi-Stock</span>
-                  <span className="text-base font-bold font-mono text-blue-400 mt-0.5 block">{stats.multiStockCount}</span>
-                </div>
-              </div>
-
-              {/* Store Action Bar: Hide all products toggle + Manage products */}
-              <div className="pt-2 border-t border-inherit flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
-                <button
-                  onClick={() => toggleStoreVisibility(store.id)}
-                  className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
-                    store.isHidden
-                      ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                      : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/30'
-                  }`}
-                >
-                  {store.isHidden ? (
-                    <>
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Make Products Live</span>
-                    </>
-                  ) : (
-                    <>
-                      <EyeOff className="w-3.5 h-3.5" />
-                      <span>Hide All Products</span>
-                    </>
+                {/* 4. Commission & Shipping (Cols 9-10) */}
+                <div className="xl:col-span-2 text-xs w-full space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-slate-400">Commission:</span>
+                    <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                      {store.commissionRate || 10}%
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                    <Truck className="w-3 h-3 text-slate-500 shrink-0" />
+                    <span>Courier: <strong className="text-slate-300">{store.defaultCourier || 'TCS Express'}</strong></span>
+                  </div>
+                  {store.payoutBankName && (
+                    <div className="text-[10px] text-slate-400 truncate flex items-center gap-1">
+                      <Building className="w-3 h-3 text-slate-500 shrink-0" />
+                      <span className="truncate">{store.payoutBankName}</span>
+                    </div>
                   )}
-                </button>
+                </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                {/* 5. Master Actions (Cols 11-12) */}
+                <div className="xl:col-span-2 flex flex-wrap xl:flex-nowrap items-center justify-start xl:justify-end gap-1.5 w-full">
                   <button
                     onClick={() => handleSwitchToStoreProducts(store.id)}
-                    className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow-md shadow-blue-600/20"
+                    className="px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-sm"
+                    title="Manage products for this store"
                   >
-                    <Package className="w-3.5 h-3.5" />
+                    <Package className="w-3 h-3" />
                     <span>Products ({stats.totalProducts})</span>
                   </button>
 
                   <button
                     onClick={() => handleSwitchToStoreOrders(store.id)}
-                    className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold border border-slate-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-bold border border-slate-700 transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+                    title="Manage fulfillment and deliveries"
                   >
-                    <Store className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Orders &amp; Deliveries</span>
+                    <Truck className="w-3 h-3 text-blue-400" />
+                    <span>Orders</span>
+                  </button>
+
+                  <button
+                    onClick={() => toggleStoreVisibility(store.id)}
+                    title={store.isHidden ? 'Make live on storefront' : 'Hide all products from storefront'}
+                    className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                      store.isHidden
+                        ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30'
+                        : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                    }`}
+                  >
+                    {store.isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenEditStore(store)}
+                    title="Edit Store Configuration"
+                    className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => setConfirmDeleteStore(store)}
+                    title="Delete Store Account"
+                    className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
+            );
+          })}
+
+          {filteredStores.length === 0 && (
+            <div className="p-12 text-center space-y-3">
+              <Store className="w-10 h-10 text-slate-500 mx-auto" />
+              <h4 className="font-bold text-sm text-white">No store accounts found</h4>
+              <p className={`text-xs ${textMuted} max-w-sm mx-auto`}>
+                No registered store accounts match your search filters. Try clearing your query or create a new store.
+              </p>
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setFilterStatus('all');
+                  setFilterVisibility('all');
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                Clear Filters
+              </button>
             </div>
-          );
-        })}
+          )}
+        </div>
       </div>
 
-      {/* MODAL: CREATE OR EDIT STORE ACCOUNT */}
+      {/* MODAL: CREATE OR EDIT STORE ACCOUNT (Includes all missing options) */}
       {isStoreModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className={`w-full max-w-xl rounded-2xl shadow-2xl border ${cardBg} p-6 space-y-5 text-white max-h-[92vh] overflow-y-auto custom-scrollbar`}>
+          <div className={`w-full max-w-2xl rounded-2xl shadow-2xl border ${cardBg} p-6 space-y-5 text-white max-h-[92vh] overflow-y-auto custom-scrollbar`}>
             <div className="flex items-center justify-between border-b border-inherit pb-3.5">
               <div>
                 <h3 className="font-bold text-base text-white">
                   {editingStoreId ? 'Edit Store & Owner Account' : 'Create New Store Account'}
                 </h3>
                 <p className={`text-xs mt-0.5 ${textMuted}`}>
-                  Configure store credentials and owner login permissions.
+                  Configure store credentials, courier logistics, and commission rates.
                 </p>
               </div>
               <button
                 onClick={() => setIsStoreModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white"
+                className="p-1 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveStore} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <form onSubmit={handleSaveStore} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Store Name */}
                 <div>
-                  <label className={`block text-[11px] font-semibold mb-1 ${textMuted}`}>
-                    Store Name *
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Store Name <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. F-7 Archival & Denim Hub"
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:border-blue-500 ${inputBg}`}
+                    placeholder="e.g. Vintage Vault F-7"
+                    className={`w-full px-3 py-2 rounded-xl text-xs ${inputBg} focus:outline-none focus:border-blue-500`}
                   />
                 </div>
 
+                {/* Slug */}
                 <div>
-                  <label className={`block text-[11px] font-semibold mb-1 ${textMuted}`}>
-                    Store Slug / Identifier
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    URL Slug
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. f7-archival"
                     value={formSlug}
                     onChange={(e) => setFormSlug(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:border-blue-500 ${inputBg}`}
+                    placeholder="e.g. vintage-vault-f7"
+                    className={`w-full px-3 py-2 rounded-xl text-xs font-mono ${inputBg} focus:outline-none focus:border-blue-500`}
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Owner Name */}
                 <div>
-                  <label className={`block text-[11px] font-semibold mb-1 ${textMuted}`}>
-                    Store Owner Full Name *
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Store Owner / Manager Name
                   </label>
                   <input
                     type="text"
-                    required
-                    placeholder="e.g. Hamza Tariq"
                     value={formOwnerName}
                     onChange={(e) => setFormOwnerName(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:border-blue-500 ${inputBg}`}
+                    placeholder="e.g. Hamza Khan"
+                    className={`w-full px-3 py-2 rounded-xl text-xs ${inputBg} focus:outline-none focus:border-blue-500`}
                   />
                 </div>
 
+                {/* Owner Email */}
                 <div>
-                  <label className={`block text-[11px] font-semibold mb-1 ${textMuted}`}>
-                    Store Owner Login Email *
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Owner Login Email <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="email"
                     required
-                    placeholder="e.g. f7vault@jutakapra.com"
                     value={formOwnerEmail}
                     onChange={(e) => setFormOwnerEmail(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:border-blue-500 ${inputBg}`}
+                    placeholder="e.g. owner@vintagevault.pk"
+                    className={`w-full px-3 py-2 rounded-xl text-xs font-mono ${inputBg} focus:outline-none focus:border-blue-500`}
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Owner Phone */}
                 <div>
-                  <label className={`block text-[11px] font-semibold mb-1 ${textMuted}`}>
-                    Owner Phone Number
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Owner WhatsApp / Contact Phone
                   </label>
                   <input
                     type="text"
-                    placeholder="+92 321 4441234"
                     value={formOwnerPhone}
                     onChange={(e) => setFormOwnerPhone(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:border-blue-500 ${inputBg}`}
+                    placeholder="e.g. +92 300 1234567"
+                    className={`w-full px-3 py-2 rounded-xl text-xs font-mono ${inputBg} focus:outline-none focus:border-blue-500`}
                   />
                 </div>
 
+                {/* Store Passcode */}
                 <div>
-                  <label className={`block text-[11px] font-semibold mb-1 ${textMuted}`}>
-                    Store Owner Passcode / Password
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Store Login Passcode
                   </label>
                   <input
                     type="text"
-                    placeholder="store123"
+                    required
                     value={formPasscode}
                     onChange={(e) => setFormPasscode(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:border-blue-500 ${inputBg}`}
+                    placeholder="e.g. store123"
+                    className={`w-full px-3 py-2 rounded-xl text-xs font-mono ${inputBg} focus:outline-none focus:border-blue-500`}
                   />
+                </div>
+
+                {/* City */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    City Location
+                  </label>
+                  <select
+                    value={formCity}
+                    onChange={(e) => setFormCity(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-xl text-xs ${inputBg} focus:outline-none focus:border-blue-500 cursor-pointer`}
+                  >
+                    <option value="Islamabad">Islamabad</option>
+                    <option value="Lahore">Lahore</option>
+                    <option value="Karachi">Karachi</option>
+                    <option value="Rawalpindi">Rawalpindi</option>
+                    <option value="Peshawar">Peshawar</option>
+                    <option value="Faisalabad">Faisalabad</option>
+                    <option value="Multan">Multan</option>
+                    <option value="Quetta">Quetta</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                {/* Commission Rate */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Platform Commission Rate (%)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={formCommissionRate}
+                      onChange={(e) => setFormCommissionRate(Number(e.target.value))}
+                      className={`w-full px-3 py-2 rounded-xl text-xs font-mono ${inputBg} focus:outline-none focus:border-blue-500`}
+                    />
+                    <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
+                  </div>
+                </div>
+
+                {/* Default Courier Partner */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Default Courier Partner
+                  </label>
+                  <select
+                    value={formDefaultCourier}
+                    onChange={(e) => setFormDefaultCourier(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-xl text-xs ${inputBg} focus:outline-none focus:border-blue-500 cursor-pointer`}
+                  >
+                    <option value="TCS Express">TCS Express</option>
+                    <option value="Leopards Courier">Leopards Courier</option>
+                    <option value="Trax Logistics">Trax Logistics</option>
+                    <option value="Call Courier">Call Courier</option>
+                    <option value="PostEx">PostEx</option>
+                    <option value="M&P Express">M&P Express</option>
+                  </select>
+                </div>
+
+                {/* Store Tier / Badge */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Store Badge / Tier
+                  </label>
+                  <select
+                    value={formBadge}
+                    onChange={(e) => setFormBadge(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-xl text-xs ${inputBg} focus:outline-none focus:border-blue-500 cursor-pointer`}
+                  >
+                    <option value="Verified Vault">Verified Vault</option>
+                    <option value="Vintage Archive">Vintage Archive</option>
+                    <option value="Official Partner">Official Partner</option>
+                    <option value="Streetwear Drop">Streetwear Drop</option>
+                  </select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                <div>
-                  <label className={`block text-[11px] font-semibold mb-1 ${textMuted}`}>City</label>
-                  <input
-                    type="text"
-                    placeholder="Islamabad, Lahore, Karachi"
-                    value={formCity}
-                    onChange={(e) => setFormCity(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:border-blue-500 ${inputBg}`}
-                  />
-                </div>
+              {/* Physical Address */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Physical Store Address / Drop-Off Point
+                </label>
+                <input
+                  type="text"
+                  value={formAddress}
+                  onChange={(e) => setFormAddress(e.target.value)}
+                  placeholder="e.g. Shop 4B, Beverly Centre, Blue Area, Islamabad"
+                  className={`w-full px-3 py-2 rounded-xl text-xs ${inputBg} focus:outline-none focus:border-blue-500`}
+                />
+              </div>
 
-                <div>
-                  <label className={`block text-[11px] font-semibold mb-1 ${textMuted}`}>Commission %</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={formCommissionRate}
-                    onChange={(e) => setFormCommissionRate(Number(e.target.value))}
-                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:border-blue-500 ${inputBg}`}
-                  />
+              {/* Seller Payout Bank Information */}
+              <div className="p-3.5 rounded-xl bg-black/25 border border-inherit space-y-3">
+                <div className="flex items-center space-x-2 text-xs font-bold text-blue-400">
+                  <Building className="w-4 h-4" />
+                  <span>Store Owner Payout Bank Account (Optional)</span>
                 </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">Account Title</label>
+                    <input
+                      type="text"
+                      value={formPayoutAccountTitle}
+                      onChange={(e) => setFormPayoutAccountTitle(e.target.value)}
+                      placeholder="e.g. Hamza Khan"
+                      className={`w-full px-2.5 py-1.5 rounded-lg text-xs ${inputBg}`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">Bank / Wallet Name</label>
+                    <input
+                      type="text"
+                      value={formPayoutBankName}
+                      onChange={(e) => setFormPayoutBankName(e.target.value)}
+                      placeholder="e.g. Meezan Bank / JazzCash"
+                      className={`w-full px-2.5 py-1.5 rounded-lg text-xs ${inputBg}`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">IBAN / Account #</label>
+                    <input
+                      type="text"
+                      value={formPayoutIbanOrPhone}
+                      onChange={(e) => setFormPayoutIbanOrPhone(e.target.value)}
+                      placeholder="e.g. PK36MEZN..."
+                      className={`w-full px-2.5 py-1.5 rounded-lg text-xs font-mono ${inputBg}`}
+                    />
+                  </div>
+                </div>
+              </div>
 
-                <div>
-                  <label className={`block text-[11px] font-semibold mb-1 ${textMuted}`}>Status</label>
+              {/* Status & Visibility Switches */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-inherit">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-black/20 border border-inherit">
+                  <div>
+                    <span className="text-xs font-semibold text-white block">Account Status</span>
+                    <span className="text-[10px] text-slate-400 block">
+                      {formStatus === 'active' ? 'Active — store owner can login' : 'Suspended — login disabled'}
+                    </span>
+                  </div>
                   <select
                     value={formStatus}
                     onChange={(e) => setFormStatus(e.target.value as any)}
-                    className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:border-blue-500 ${inputBg} cursor-pointer`}
+                    className="px-2.5 py-1.5 rounded-lg bg-black/30 border border-slate-700 text-xs font-bold text-white cursor-pointer"
                   >
                     <option value="active">Active</option>
                     <option value="suspended">Suspended</option>
                   </select>
                 </div>
-              </div>
 
-              <div>
-                <label className={`block text-[11px] font-semibold mb-1 ${textMuted}`}>
-                  Physical Address / Location
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Gol Market, F-7/3, Islamabad"
-                  value={formAddress}
-                  onChange={(e) => setFormAddress(e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:border-blue-500 ${inputBg}`}
-                />
-              </div>
-
-              <div>
-                <label className={`block text-[11px] font-semibold mb-1 ${textMuted}`}>
-                  Store Description
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Brief summary of store specialty..."
-                  value={formDescription}
-                  onChange={(e) => setFormDescription(e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:border-blue-500 ${inputBg}`}
-                />
-              </div>
-
-              {/* Hide All Products Option */}
-              <div className="p-3.5 rounded-xl bg-black/30 border border-slate-700 flex items-center justify-between">
-                <div>
-                  <span className="font-semibold text-white block">Hide all products from this store</span>
-                  <span className="text-[11px] text-slate-400 block">
-                    When enabled, products assigned to this store will be instantly hidden on the storefront.
-                  </span>
+                <div className="flex items-center justify-between p-3 rounded-xl bg-black/20 border border-inherit">
+                  <div>
+                    <span className="text-xs font-semibold text-white block">Storefront Visibility</span>
+                    <span className="text-[10px] text-slate-400 block">
+                      {formIsHidden ? 'Hidden — products unlisted' : 'Live — visible to buyers'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFormIsHidden(!formIsHidden)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                      formIsHidden
+                        ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                        : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                    }`}
+                  >
+                    {formIsHidden ? 'Hidden' : 'Live on Site'}
+                  </button>
                 </div>
-                <input
-                  type="checkbox"
-                  checked={formIsHidden}
-                  onChange={(e) => setFormIsHidden(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 rounded border-slate-700 focus:ring-blue-500 cursor-pointer"
-                />
               </div>
 
-              <div className="flex justify-end gap-2.5 pt-3 border-t border-inherit">
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-inherit">
                 <button
                   type="button"
                   onClick={() => setIsStoreModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-inherit text-xs font-semibold hover:bg-white/5 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold cursor-pointer shadow-lg shadow-blue-600/30"
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/30 cursor-pointer active:scale-95"
                 >
-                  {editingStoreId ? 'Save Changes' : 'Create Store Account'}
+                  {editingStoreId ? 'Update Store Account' : 'Save & Deploy Store'}
                 </button>
               </div>
             </form>
@@ -792,31 +1054,36 @@ export const AdminStoresView: React.FC = () => {
         </div>
       )}
 
-      {/* CONFIRM DELETE MODAL */}
+      {/* MODAL: CONFIRM DELETE STORE */}
       {confirmDeleteStore && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
           <div className={`w-full max-w-md rounded-2xl shadow-2xl border ${cardBg} p-6 space-y-4 text-white`}>
             <div className="flex items-center space-x-3 text-red-400">
               <AlertTriangle className="w-6 h-6 shrink-0" />
-              <h3 className="font-bold text-base text-white">Delete Store Account?</h3>
+              <h3 className="font-bold text-base">Delete Store Account?</h3>
             </div>
-            <p className={`text-xs leading-relaxed ${textMuted}`}>
-              Are you sure you want to delete <strong className="text-white">"{confirmDeleteStore.name}"</strong>?
-              This store owner ({confirmDeleteStore.ownerEmail}) will lose access to their portal.
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Are you sure you want to permanently delete <strong>{confirmDeleteStore.name}</strong> ({confirmDeleteStore.ownerEmail})?
+              All associated inventory items will revert to the central platform store.
             </p>
-            <div className="flex justify-end gap-2.5 pt-2">
+            <div className="flex items-center justify-end space-x-2 pt-3 border-t border-inherit">
               <button
                 onClick={() => setConfirmDeleteStore(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold cursor-pointer"
+                className="px-4 py-2 rounded-xl border border-inherit text-xs font-semibold hover:bg-white/5 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={() => {
                   deleteStore(confirmDeleteStore.id);
+                  addToast({
+                    type: 'info',
+                    title: 'Store Deleted',
+                    message: `${confirmDeleteStore.name} account deleted from platform.`,
+                  });
                   setConfirmDeleteStore(null);
                 }}
-                className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-md shadow-red-600/30 cursor-pointer"
               >
                 Confirm Delete
               </button>
@@ -825,106 +1092,61 @@ export const AdminStoresView: React.FC = () => {
         </div>
       )}
 
-      {/* SUPABASE SQL SCHEMA SETUP MODAL */}
+      {/* MODAL: POSTGRESQL SQL SCHEMA */}
       {isSqlModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className={`w-full max-w-2xl rounded-2xl shadow-2xl border ${cardBg} p-6 space-y-4 text-white max-h-[90vh] flex flex-col`}>
-            <div className="flex items-center justify-between border-b border-inherit pb-3">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center">
+          <div className={`w-full max-w-2xl rounded-2xl shadow-2xl border ${cardBg} p-6 space-y-4 text-white font-mono text-xs max-h-[85vh] overflow-y-auto custom-scrollbar`}>
+            <div className="flex items-center justify-between border-b border-inherit pb-3 font-sans">
+              <div>
+                <h3 className="font-bold text-sm text-indigo-400 flex items-center gap-2">
                   <Database className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-white">Supabase PostgreSQL Stores DDL</h3>
-                  <p className="text-[11px] text-slate-400">Stores Table Schema, RLS Security Policies &amp; Triggers</p>
-                </div>
+                  <span>Supabase PostgreSQL Schema: public.stores</span>
+                </h3>
+                <span className="text-[11px] text-slate-400">Live schema executed on kbdrlhiishmetsddlstq</span>
               </div>
-              <button
-                onClick={() => setIsSqlModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white transition-colors"
-              >
+              <button onClick={() => setIsSqlModalOpen(false)} className="p-1 rounded-lg text-slate-400 hover:text-white cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className={`text-xs ${textMuted} leading-relaxed`}>
-              Every store is stored as an independent entity in Supabase. Run this SQL query in your{' '}
-              <strong className="text-white">Supabase Project &rarr; SQL Editor</strong> to create the table and enable automatic real-time sync.
-            </p>
-
-            <div className="relative flex-1 min-h-0 bg-black/60 rounded-xl border border-slate-800 p-3.5 overflow-y-auto">
-              <button
-                onClick={() => {
-                  const sqlCode = `-- 1. Create public.stores table
-CREATE TABLE IF NOT EXISTS public.stores (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    owner_email TEXT NOT NULL,
-    owner_name TEXT,
-    owner_phone TEXT,
-    passcode TEXT DEFAULT 'store123',
-    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
-    is_hidden BOOLEAN NOT NULL DEFAULT FALSE,
-    city TEXT DEFAULT 'Islamabad',
-    address TEXT,
-    commission_rate NUMERIC(5,2) NOT NULL DEFAULT 10.00,
-    logo_url TEXT,
-    description TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 2. Indexes & RLS Policies
-CREATE INDEX IF NOT EXISTS idx_stores_owner_email ON public.stores (LOWER(owner_email));
-ALTER TABLE public.stores ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public can read active stores" ON public.stores FOR SELECT USING (true);
-CREATE POLICY "Admin manage stores" ON public.stores FOR ALL USING (true);`;
-                  navigator.clipboard.writeText(sqlCode);
-                  addToast({
-                    type: 'success',
-                    title: 'SQL Copied',
-                    message: 'Supabase Stores DDL script copied to clipboard.',
-                  });
-                }}
-                className="absolute top-2.5 right-2.5 px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-[11px] font-mono font-bold text-white flex items-center gap-1 cursor-pointer transition-colors"
-              >
-                <Copy className="w-3 h-3" /> Copy SQL
-              </button>
-
-              <pre className="text-[11px] text-emerald-400 font-mono whitespace-pre overflow-x-auto leading-relaxed pt-2">
+            <pre className="p-4 rounded-xl bg-black/60 border border-slate-800 text-[11px] text-emerald-400 whitespace-pre-wrap overflow-x-auto">
 {`CREATE TABLE IF NOT EXISTS public.stores (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT NOT NULL,
-    owner_email TEXT NOT NULL,
-    owner_name TEXT,
-    owner_phone TEXT,
-    passcode TEXT DEFAULT 'store123',
-    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
-    is_hidden BOOLEAN NOT NULL DEFAULT FALSE,
-    city TEXT DEFAULT 'Islamabad',
-    address TEXT,
-    commission_rate NUMERIC(5,2) NOT NULL DEFAULT 10.00,
-    logo_url TEXT,
-    description TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  slug TEXT UNIQUE,
+  owner_email TEXT NOT NULL,
+  owner_name TEXT,
+  owner_phone TEXT,
+  passcode TEXT DEFAULT 'store123',
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
+  is_hidden BOOLEAN DEFAULT FALSE,
+  city TEXT DEFAULT 'Islamabad',
+  address TEXT,
+  commission_rate NUMERIC DEFAULT 10,
+  logo_url TEXT,
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Enable Row Level Security (RLS)
 ALTER TABLE public.stores ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public can read active stores" ON public.stores FOR SELECT USING (true);
-CREATE POLICY "Admin manage stores" ON public.stores FOR ALL USING (true);`}
-              </pre>
-            </div>
 
-            <div className="flex justify-between items-center pt-2 border-t border-inherit">
-              <span className="text-[10px] text-slate-400">File location: <code className="text-blue-400 font-mono">/supabase/schema_stores.sql</code></span>
+-- Allow public read access to live stores
+CREATE POLICY "Allow public read access on stores"
+  ON public.stores FOR SELECT USING (true);
+
+-- Allow full master access for service role and admin
+CREATE POLICY "Allow service role full access on stores"
+  ON public.stores FOR ALL USING (true);`}
+            </pre>
+
+            <div className="flex justify-end pt-2 font-sans">
               <button
                 onClick={() => setIsSqlModalOpen(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold text-xs cursor-pointer"
               >
-                Close
+                Close Schema
               </button>
             </div>
           </div>
