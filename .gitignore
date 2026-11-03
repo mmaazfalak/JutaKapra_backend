@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+
+# Local Environment Variables
+.env
+.env.*
+!.env.example
+*.local
+
+# System & IDE files
+.DS_Store
+*.log
+.vscode/
+.antigravity/
