@@ -18,7 +18,7 @@ dotenv.config();
 const GOOGLE_CLIENT_ID =
   process.env.GOOGLE_CLIENT_ID ||
   process.env.VITE_GOOGLE_CLIENT_ID ||
-  '682598139720-a1h7nl3vhoisp3rqbugafi98so5ugi8m.apps.googleusercontent.com';
+  '891892149699-fisbsl8g6jt8n8nde1u3kgna40rqqndo.apps.googleusercontent.com';
 
 const googleAuthClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
