@@ -10,9 +10,9 @@ import { ExternalLink, ShieldCheck } from 'lucide-react';
 const FRONTEND_URL = (import.meta as any).env?.VITE_FRONTEND_URL || 'https://jutakaprafrontend.vercel.app';
 
 const AdminPortalShell: React.FC = () => {
-  const { currentView, navigateTo, themeMode, isAdminAuthenticated, currentAdminUser } = useStore();
+  const { currentView, navigateTo, themeMode, isAdminLoggedIn, adminRole } = useStore();
 
-  const isAuthed = isAdminAuthenticated || Boolean(currentAdminUser);
+  const isAuthed = Boolean(isAdminLoggedIn);
 
   useEffect(() => {
     // If not authenticated, ensure routed to admin-login

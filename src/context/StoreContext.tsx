@@ -224,6 +224,7 @@ interface StoreContextType {
 
   // Admin Auth
   isAdminLoggedIn: boolean;
+  isAdminAuthenticated: boolean;
   loginAdmin: (password: string, email?: string, is2faVerified?: boolean) => Promise<boolean>;
   logoutAdmin: () => void;
 
@@ -3740,6 +3741,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setCurrentStoreId,
         loginStoreOwner,
         isAdminLoggedIn,
+        isAdminAuthenticated: isAdminLoggedIn,
         loginAdmin,
         logoutAdmin,
         toasts,
