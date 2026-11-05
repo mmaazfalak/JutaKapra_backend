@@ -8,6 +8,7 @@ import authRoutes from './routes/authRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
 import emailRoutes from './routes/emailRoutes.js';
 import cartRoutes from './routes/cartRoutes.js';
+import productRoutes from './routes/productRoutes.js';
 
 dotenv.config();
 
@@ -20,9 +21,10 @@ app.use(compression({
   threshold: 1024, // Compress responses over 1KB
 }));
 
-// Security Headers
+// Security Headers (configured to allow Google One Tap & OAuth postMessage popups)
 app.use(helmet({
   contentSecurityPolicy: false,
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
 }));
 
 // CORS Configuration (supports credentials for secure cookies)
@@ -55,9 +57,10 @@ app.get('/api/health', (_req, res) => {
   res.status(200).json({ status: 'ok', service: 'juta-kapra-backend-api', timestamp: new Date().toISOString() });
 });
 
-// Authentication, Orders, Carts & Email Subsystems
+// Authentication, Products, Orders, Carts & Email Subsystems
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', authRoutes);
+app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/email', emailRoutes);
