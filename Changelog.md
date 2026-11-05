@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.3.1] - 2026-11-06
 
+### Fixed
+- **Vercel Hobby Plan Cron Limit**: Changed cron schedule in `vercel.json` from hourly (`0 * * * *`) to once-daily (`0 0 * * *`) to strictly comply with Vercel Hobby tier limitations and resolve deployment errors.
+
 ### Changed
 - **Dedicated SMTP Sender (`support@jutakapra.store`)**: Standardized all transactional and marketing notification emails (Order Placed, Order Confirmed, Order Dispatched with Delivery Date, Password Reset OTP, 10-Hour Cart Recovery) to send directly via authenticated Namecheap Private Email SMTP from `"Juta Kapra" <support@jutakapra.store>` with `replyTo: support@jutakapra.store`.
 - **Frontend Direct Backend Relay**: Configured `sendNotificationEmail` in `src/lib/emailService.ts` to dispatch email payloads to `/api/auth/send-email` and `/api/email/send`, guaranteeing zero reliance on external script urls.
