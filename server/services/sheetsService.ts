@@ -9,6 +9,11 @@ export const GAS_DEPLOYMENT_URL =
 
 export const GOOGLE_SHEETS_WEBHOOK_URL = GAS_DEPLOYMENT_URL;
 
+/**
+ * Per user instruction: Deployment URL for sending emails/webhooks is strictly PAUSED.
+ */
+export const PAUSE_DEPLOYMENT_URL_EMAILS = true;
+
 export const GOOGLE_SHEETS_WEBHOOK_SECRET =
   process.env.GOOGLE_SHEETS_WEBHOOK_SECRET ||
   process.env.APPS_SCRIPT_SHARED_SECRET ||
@@ -166,8 +171,8 @@ function buildHtmlBody(payload: any, type: string, recipientEmail: string): stri
  * Handles 302 redirects automatically with redirect: 'follow'.
  */
 export async function sendWebhookToGoogleAppsScript(payload: SheetWebhookPayload & Record<string, any>): Promise<boolean> {
-  if (!GOOGLE_SHEETS_WEBHOOK_URL) {
-    console.warn('[Webhook] GOOGLE_SHEETS_WEBHOOK_URL not configured. Skipped dispatch.');
+  // PAUSED: Deployment URL email/webhook function is strictly paused per user instruction
+  if (PAUSE_DEPLOYMENT_URL_EMAILS || !GOOGLE_SHEETS_WEBHOOK_URL) {
     return false;
   }
 

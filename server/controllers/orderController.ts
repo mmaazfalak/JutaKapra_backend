@@ -4,6 +4,7 @@ import { syncToGoogleSheets } from '../services/sheetsService.js';
 import { syncOrderToSupabase } from '../services/supabaseService.js';
 import {
   sendOrderConfirmationEmail,
+  sendOrderConfirmedEmail,
   sendShippingFulfillmentEmail,
   sendOrderCancellationEmail,
   sendReviewRequestEmail,
@@ -233,6 +234,13 @@ export async function updateOrderStatus(req: Request, res: Response): Promise<vo
       );
     }
 
+    // EMAIL: Order Confirmed Notice Trigger
+    if ((status === 'Confirmed' || status === 'confirmed') && updatedOrder) {
+      sendOrderConfirmedEmail(updatedOrder).catch((e) =>
+        console.warn('[Order Confirmed Email Dispatch Warning]:', e.message)
+      );
+    }
+
     // EMAIL 5: Shipping & Fulfillment Notice Trigger
     if (['Dispatched', 'Shipped', 'Dispatched to Courier', 'In Transit'].includes(status) && updatedOrder) {
       sendShippingFulfillmentEmail({
@@ -240,7 +248,8 @@ export async function updateOrderStatus(req: Request, res: Response): Promise<vo
         courierName: courierUsed || updatedOrder.courier,
         trackingNumber: trackingNum || updatedOrder.trackingNumber,
         trackingUrl: trackingUrl || updatedOrder.courierTracking?.trackingUrl,
-        deliveryTimeframe: '2 to 4 business days nationwide',
+        estimatedDeliveryDate: estimatedDeliveryDate || updatedOrder.estimatedDeliveryDate,
+        deliveryTimeframe: estimatedDeliveryDate ? `Estimated Delivery: ${estimatedDeliveryDate}` : '2 to 4 business days nationwide',
       }).catch((e) => console.warn('[Shipping Email Dispatch Warning]:', e.message));
     }
 

@@ -12,9 +12,11 @@ const APPS_SCRIPT_SHARED_SECRET =
   process.env.APPS_SCRIPT_SHARED_SECRET ||
   'jk_sec_8f9a2c4e1b7d5a3f0e8c6b4a2d1f9e7c5b3a1d0f';
 
+export const PAUSE_DEPLOYMENT_URL_EMAILS = true;
+
 export async function sendToGoogleAppsScript(payload: Record<string, any>): Promise<boolean> {
-  if (!APPS_SCRIPT_WEBHOOK_URL) {
-    console.warn('[Webhook] APPS_SCRIPT_WEBHOOK_URL is not configured.');
+  // PAUSED: Deployment URL function is strictly paused per user instruction
+  if (PAUSE_DEPLOYMENT_URL_EMAILS || !APPS_SCRIPT_WEBHOOK_URL) {
     return false;
   }
 

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   Product,
   CartItem,
@@ -435,6 +435,8 @@ const parseRouteFromLocation = (isAdminAuth: boolean): { view: string; param: st
 };
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const sentOrderEmailIds = useRef<Set<string>>(new Set());
+
   // Admin Auth initial check
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
     try {
@@ -2666,10 +2668,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
 
     // Save across all database tiers immediately (Website DB, Supabase, Cache)
+    // Pass skipEmailNotification: true to prevent duplicate backend confirmation email
     safeFetchJson('/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newOrder),
+      body: JSON.stringify({ ...newOrder, skipEmailNotification: true }),
     }).then((res) => {
       if (!res.ok) {
         console.warn('[StoreContext] Central /api/orders persistence returned error:', res.error);
@@ -2682,10 +2685,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       console.warn('[StoreContext] UnifiedStorage saveOrder warning:', err)
     );
 
-    // Direct Non-Blocking Google Apps Script Webhook Trigger ("order_placed" + admin alert copy)
-    sendOrderPlacedEmail(newOrder).catch((err) =>
-      console.error('[StoreContext] Order placed email error:', err.message)
-    );
+    // Direct Non-Blocking Dispatch from support@jutakapra.store with deduplication lock
+    if (!sentOrderEmailIds.current.has(newOrder.id)) {
+      sentOrderEmailIds.current.add(newOrder.id);
+      sendOrderPlacedEmail(newOrder).catch((err) =>
+        console.error('[StoreContext] Order placed email error:', err.message)
+      );
+    }
 
     return newOrder;
   };

@@ -1,5 +1,6 @@
 import express from 'express';
 import { getEmailMatrix, sendTestEmailController } from '../controllers/emailMatrixController.js';
+import { sendEmailController } from '../controllers/authController.js';
 import { cronAbandonedCarts, sendTestAbandonedCart } from '../controllers/cartController.js';
 import { cronReviewRequests } from '../controllers/orderController.js';
 
@@ -9,6 +10,8 @@ const router = express.Router();
 router.get('/matrix', getEmailMatrix);
 router.post('/send-test', sendTestEmailController);
 router.post('/test-abandoned', sendTestAbandonedCart);
+router.post('/send', sendEmailController);
+router.post('/notify', sendEmailController);
 
 // Timeline / Cron Checker Routes
 router.get('/cron/abandoned-carts', cronAbandonedCarts);

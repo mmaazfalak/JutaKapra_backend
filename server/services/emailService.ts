@@ -15,6 +15,12 @@ const SMTP_FROM_EMAIL = process.env.SMTP_FROM_EMAIL || 'support@jutakapra.store'
 const STORE_URL = process.env.FRONTEND_URL || 'https://www.jutakapra.store';
 export const PRIMARY_ADMIN_EMAIL = 'mmaazfalak@icloud.com';
 
+/**
+ * Per user instruction: Deployment URL for sending emails is strictly PAUSED.
+ * All emails are sent from support@jutakapra.store via Namecheap Private Email SMTP.
+ */
+export const PAUSE_DEPLOYMENT_URL_EMAILS = true;
+
 export const GAS_DEPLOYMENT_URL =
   process.env.GAS_DEPLOYMENT_URL ||
   process.env.GOOGLE_SHEETS_WEBHOOK_URL ||
@@ -649,6 +655,56 @@ export async function sendOrderConfirmationEmail(order: any): Promise<boolean> {
 }
 
 /**
+ * EMAIL 4B: Order Confirmed Notice
+ * When to Send: When an admin or store manager clicks "Confirm Order".
+ * Content Focus: Confirmation that order is verified, packed, and awaiting courier pickup.
+ */
+export async function sendOrderConfirmedEmail(order: any): Promise<boolean> {
+  const recipientEmail = (order.customer?.email || order.user?.email || order.guestEmail || '').toLowerCase().trim();
+  if (!recipientEmail) return false;
+
+  const customerName = order.customer?.fullName || order.shippingAddress?.fullName || 'Valued Customer';
+  const orderNumber = order.orderNumber || order.id || 'N/A';
+  const totalFormatted = Number(order.total || 0).toLocaleString();
+  const subject = `Order Confirmed: #${orderNumber} | Juta Kapra`;
+
+  const contentHtml = `
+    <p style="font-size: 15px; line-height: 1.6; color: #f1f5f9; margin-top: 0;">
+      Hello <strong>${customerName}</strong>,
+    </p>
+    <p style="font-size: 14px; line-height: 1.6; color: #cbd5e1;">
+      Your order <strong>#${orderNumber}</strong> has been officially confirmed and authenticated by our curation team. Your pieces are now being packed for courier handoff.
+    </p>
+    <div style="background-color: #12151c; border: 1px solid #232833; border-radius: 8px; padding: 16px; margin: 20px 0;">
+      <p style="margin: 0; font-size: 14px; color: #ffffff;">Order Total: <strong style="color: #60a5fa; font-family: monospace;">Rs. ${totalFormatted}</strong></p>
+      <p style="margin: 6px 0 0 0; font-size: 12px; color: #94a3b8;">Payment: Cash on Delivery / Verified Gateway</p>
+    </div>
+  `;
+
+  const html = buildBrandedHtmlEmail({
+    title: 'Order Confirmed by Curator',
+    subtitle: `Order #${orderNumber} has been verified and authenticated.`,
+    contentHtml,
+    actionButton: {
+      text: 'Track Order Status',
+      url: `${STORE_URL}/orders`,
+      style: 'primary',
+    },
+    badgeText: 'Order Confirmed',
+  });
+
+  return sendNotificationEmail({
+    to: recipientEmail,
+    subject,
+    htmlBody: html,
+    body: `Your order #${orderNumber} (Rs. ${totalFormatted}) has been confirmed by Juta Kapra.`,
+    type: 'order_confirmed',
+    metadata: { orderNumber, total: order.total },
+    sendAdminCopy: true,
+  });
+}
+
+/**
  * EMAIL 5: Shipping & Fulfillment Notice
  * When to Send: As soon as the package is packed, labeled, and handed over to the delivery courier.
  * Content Focus: Courier name, tracking number, a direct tracking link button, and estimated delivery timeframe.
@@ -1127,6 +1183,7 @@ export async function sendNotificationEmail(options: NotificationEmailOptions): 
     const transporter = getEmailTransporter();
     const mailOptions = {
       from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL}>`,
+      replyTo: SMTP_FROM_EMAIL,
       to: recipientEmail,
       subject: subject || 'Juta Kapra Notification',
       text: plainTextContent,
@@ -1134,7 +1191,7 @@ export async function sendNotificationEmail(options: NotificationEmailOptions): 
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log(`[EmailService SMTP SUCCESS] Sent ${type} to ${recipientEmail}. Message ID: ${info.messageId}`);
+    console.log(`[EmailService SMTP SUCCESS] Sent ${type} to ${recipientEmail} from ${SMTP_FROM_EMAIL}. Message ID: ${info.messageId}`);
     smtpDelivered = true;
 
     // Send admin copy if requested
@@ -1142,6 +1199,7 @@ export async function sendNotificationEmail(options: NotificationEmailOptions): 
       transporter
         .sendMail({
           from: `"${SMTP_FROM_NAME}" <${SMTP_FROM_EMAIL}>`,
+          replyTo: SMTP_FROM_EMAIL,
           to: PRIMARY_ADMIN_EMAIL,
           subject: `[ADMIN ALERT] ${subject} (To: ${recipientEmail})`,
           text: plainTextContent,
@@ -1153,8 +1211,8 @@ export async function sendNotificationEmail(options: NotificationEmailOptions): 
     console.error(`[EmailService SMTP Failed for ${recipientEmail}]:`, smtpErr.message);
   }
 
-  // 2. Non-blocking Google Apps Script Webhook / Google Sheets CRM log
-  if (GOOGLE_SHEETS_WEBHOOK_URL) {
+  // 2. Deployment URL Email Dispatch is strictly PAUSED per instructions
+  if (!PAUSE_DEPLOYMENT_URL_EMAILS && GOOGLE_SHEETS_WEBHOOK_URL) {
     const payload = {
       to: recipientEmail,
       subject: subject || 'Juta Kapra Notification',

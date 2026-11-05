@@ -7,8 +7,11 @@ import { getApiUrl } from '../utils/api';
 
 /**
  * Active Google Apps Script Deployment URL
- * Set to "" as a clean placeholder so a new deployment URL can be inserted later without breaking builds.
+ * PAUSED: Do not use deployment URL to send emails per user instructions.
+ * All emails are sent from support@jutakapra.store via backend SMTP service.
  */
+export const PAUSE_DEPLOYMENT_URL_EMAILS = true;
+
 export const GAS_DEPLOYMENT_URL =
   (import.meta as any).env?.VITE_GAS_DEPLOYMENT_URL ||
   (import.meta as any).env?.VITE_GOOGLE_SHEETS_WEBHOOK_URL ||
@@ -51,22 +54,19 @@ export interface NotificationEmailOptions {
 }
 
 /**
- * Send an email notification via Google Apps Script Webhook (non-blocking, follows redirects)
+ * Send an email notification directly via Backend SMTP from support@jutakapra.store
+ * (Google Apps Script deployment URL sending is paused per user instructions).
  */
 export async function sendNotificationEmail(options: NotificationEmailOptions): Promise<boolean> {
-  const activeUrl = GAS_DEPLOYMENT_URL || GOOGLE_SHEETS_WEBHOOK_URL;
-
-  // Safety check: if GAS_DEPLOYMENT_URL is empty, log clean warning and skip network execution instead of crashing
-  if (!activeUrl || !activeUrl.trim()) {
-    console.warn('[EmailService] GAS_DEPLOYMENT_URL is empty or not configured. Skipping network execution cleanly.');
-    return true; // Graceful non-blocking exit, prevents any app crash
-  }
-
   const { to, subject, htmlBody, body, plainText, type, action, metadata = {}, sendAdminCopy = false } = options;
   const recipientEmail = (to || '').toLowerCase().trim();
-  const plainTextContent = body || plainText || subject;
 
-  // Normalized action string for Google Apps Script doPost(e)
+  if (!recipientEmail) {
+    console.warn('[EmailService] Recipient email is missing. Skipping notification.');
+    return false;
+  }
+
+  const plainTextContent = body || plainText || subject;
   const resolvedAction = action || (type ? (type.startsWith('send_') ? type : `send_${type}`) : 'send_notification');
 
   // Guarantee htmlBody is NEVER empty or undefined
@@ -77,73 +77,48 @@ export async function sendNotificationEmail(options: NotificationEmailOptions): 
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; background: #0a0a0a; color: #ffffff; border-radius: 12px;">
           <h2 style="font-size: 18px; margin-bottom: 8px;">JUTA.KAPRA ARCHIVE</h2>
           <p style="font-size: 14px; line-height: 1.6; color: #e4e4e7;">${plainTextContent}</p>
+          <hr style="border: 0; border-top: 1px solid #27272a; margin: 20px 0;" />
+          <p style="font-size: 12px; color: #71717a;">Official notification sent from <a href="mailto:support@jutakapra.store" style="color: #60a5fa;">support@jutakapra.store</a></p>
         </div>
       `.trim();
 
-  // Exact JSON payload format requested with explicit action
+  // Payload for Backend SMTP Delivery from support@jutakapra.store
   const payload = {
     action: resolvedAction,
     to: recipientEmail,
-    subject: subject || 'Juta.Kapra Notification',
+    subject: subject || 'Juta Kapra Notification',
     htmlBody: formattedHtmlContent,
     body: plainTextContent,
     type: type || 'generic',
     email: recipientEmail,
     eventType: (type || 'generic').toUpperCase(),
-    secret: WEBHOOK_SECRET,
     timestamp: new Date().toISOString(),
-    ...metadata,
+    sendAdminCopy,
+    metadata,
   };
 
-  // 1. Try serverless proxy route first
+  // 1. Direct Backend SMTP Dispatch (Always sent from support@jutakapra.store)
   try {
     const proxyRes = await fetch(getApiUrl('/api/auth/send-email'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(options),
+      body: JSON.stringify(payload),
     });
     if (proxyRes.ok) {
-      console.log(`[EmailService] Dispatched ${type} via backend proxy to ${recipientEmail}`);
+      console.log(`[EmailService] Dispatched ${type} from support@jutakapra.store to ${recipientEmail}`);
       return true;
     }
   } catch (proxyErr: any) {
     console.warn('[EmailService Proxy Skip]:', proxyErr.message);
   }
 
-  // 2. Direct browser-to-Google Apps Script Webhook dispatch (using text/plain and no-cors to prevent browser CORS/redirect blocks)
-  try {
-    await fetch(GOOGLE_SHEETS_WEBHOOK_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
-      body: JSON.stringify(payload),
-    });
-    console.log(`[EmailService] Dispatched ${type} directly to Apps Script for ${recipientEmail}`);
-
-    // Send admin alert copy to mmaazfalak@icloud.com if requested
-    if (sendAdminCopy && recipientEmail !== PRIMARY_ADMIN_EMAIL.toLowerCase()) {
-      fetch(GOOGLE_SHEETS_WEBHOOK_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-        },
-        body: JSON.stringify({
-          ...payload,
-          to: PRIMARY_ADMIN_EMAIL,
-          email: PRIMARY_ADMIN_EMAIL,
-          subject: `[ADMIN ALERT] ${subject} (Customer: ${recipientEmail})`,
-        }),
-      }).catch((err) => console.warn('[EmailService Admin Copy Notice]:', err.message));
-    }
-
-    return true;
-  } catch (err: any) {
-    console.warn('[EmailService Direct Notice]:', err.message);
-    return true; // Non-blocking UX
+  // 2. Google Apps Script Deployment URL email function is strictly PAUSED per user instructions
+  if (PAUSE_DEPLOYMENT_URL_EMAILS) {
+    console.info('[EmailService] GAS Deployment URL email dispatch is strictly paused per user instructions.');
+    return true; // Graceful non-blocking exit
   }
+
+  return false;
 }
 
 /**
