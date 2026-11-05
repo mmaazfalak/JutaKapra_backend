@@ -19,7 +19,8 @@
 | **Auth & Password Security** | 1 | 1 | 0 | 0 |
 | **Email Lifecycle & Admin Overhaul** | 1 | 1 | 0 | 0 |
 | **support@jutakapra.store SMTP & Pause GAS** | 1 | 1 | 0 | 0 |
-| **Total** | **6** | **6 (100%)** | **0 (0%)** | **0** |
+| **TomPay Payment Gateway Integration** | 1 | 0 | 1 | 0 |
+| **Total** | **7** | **6 (86%)** | **1 (14%)** | **0** |
 
 ---
 
@@ -50,11 +51,10 @@
 
 ---
 
-## 3. Tasks Currently in Progress
-
 ### Milestone 3: Dedicated Shopping Bag Page (`CartView`) Transition
 - **Goal**: Bag must operate as a dedicated page view without sliding over and obscuring header and navigation tabs.
 - **Status**: 100% Completed & Deployed
+- **Commit**: `5141fe7`
 - **Subtask Checklist**:
   - [x] **Audit existing components**: `CartView.tsx` already exists as a full-page view wired to `case 'cart': return <CartView />` in `App.tsx`.
   - [x] **Update Mobile Navigation Bar** ([`MobileAppNavBar.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/components/MobileAppNavBar.tsx)):
@@ -73,6 +73,7 @@
 ### Milestone 4: Google Auth & Password Lifecycle Hardening
 - **Goal**: Prevent repeat password setup loops for Google users; enforce current password verification when updating.
 - **Status**: 100% Completed & Deployed
+- **Commit**: `041793a`
 - **Subtask Checklist**:
   - [x] **Backend Controller Fix** ([`server/controllers/authController.ts`](file:///Users/mmaazfalak/antigravity/JutaKapra_backend/server/controllers/authController.ts)):
     - Made `currentPassword` mandatory when `user.passwordHash` exists.
@@ -107,9 +108,9 @@
     - Added "Confirm Order" button on pending orders triggering confirmation email.
     - Added inline date picker input on confirmed orders for `estimatedDeliveryDate`.
     - Added "Dispatch Order" action passing the date to courier dispatch API and customer email.
-  - [x] **10-Hour Cart Abandonment Logic** ([`server/controllers/cartController.ts`](file:///Users/mmaazfalak/antigravity/JutaKapra_backend/server/controllers/cartController.ts), [`server/server.ts`](file:///Users/mmaazfalak/antigravity/JutaKapra_backend/server/server.ts), [`vercel.json`](file:///Users/mmaazfalak/antigravity/JutaKapra_backend/vercel.json)):
+  - [x] **10-Hour Cart Abandonment Logic** ([`server/controllers/cartController.ts`](file:///Users/mmaazfalak/antigravity/JutaKapra_backend/server/controllers/cartController.ts), [`server/server.ts`](file:///Users/mmaazfalak/antigravity/JutaKapra_backend/server/server.ts)):
     - Configured strict 10-hour threshold (`TEN_HOURS_MS = 10 * 60 * 60 * 1000`) and subject *"Get your order delivered before someone else grabs it! | Juta Kapra"*.
-    - Added background 30-minute interval in Node server and hourly cron in `vercel.json`.
+    - Added background 30-minute interval in Node server.
     - Maintained strict prohibition against promo/discount codes.
   - [x] **Deploy & Verify**: Both frontend and backend built with 0 errors and deployed to production.
 
@@ -125,10 +126,33 @@
   - [x] **Strictly Paused Deployment URL Sending**: Added `PAUSE_DEPLOYMENT_URL_EMAILS = true` in frontend and backend `emailService.ts`, `sheetsService.ts`, and `webhookService.ts`, preventing any email delivery attempts through Google Apps Script deployment URL.
   - [x] **Frontend Direct Backend Relay**: Updated `sendNotificationEmail` in [`src/lib/emailService.ts`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/lib/emailService.ts) to dispatch payloads directly to `/api/auth/send-email` and `/api/email/send`.
   - [x] **Admin Order Confirmed Email**: Added `sendOrderConfirmedEmail` to backend `emailService.ts` and `orderController.ts` triggering notification from `support@jutakapra.store` when orders are confirmed.
+  - [x] **Vercel Hobby Plan Fix**: Removed `crons` from `vercel.json` (commit `379ae04`) to eliminate Hobby plan build errors.
   - [x] **Deploy & Verify**: Both frontend and backend built with 0 errors and deployed to production.
 
 ---
 
+## 3. Tasks Currently in Progress
+
+### Milestone 7: TomPay Payment Gateway Integration
+- **Goal**: Integrate live TomPay debit/credit card and digital wallet gateway with secure checkout session generation, webhook confirmation, and transactional email triggers.
+- **Status**: **IN PROGRESS** (Architecture & Plan Specification Complete, Pending Implementation)
+- **Security**: Credentials isolated strictly in server `.env`; secret keys redacted in documentation.
+- **Subtask Checklist**:
+  - [x] **Credential Collection & Verification**: Live API Key and Secret securely received and added to local server `.env`.
+  - [x] **Technical Specification**: Documented full sequence diagram, data flow, and endpoint requirements in [`plan.md`](file:///Users/mmaazfalak/antigravity/Jutakapra/plan.md).
+  - [x] **Secure Environment Setup**: Added `TOMPAY_API_KEY` and `TOMPAY_API_SECRET` to server `.env`.
+  - [ ] **Backend Service & Controller**:
+    - Implement `POST /api/payments/tompay/create-checkout` to initialize sessions.
+    - Implement `POST /api/payments/tompay/webhook` to handle payment authorizations.
+    - Implement `GET /api/payments/tompay/verify/:orderId` for redirect status check.
+  - [ ] **Storefront Checkout Flow**:
+    - Add `gw-tompay` to [`INITIAL_GATEWAYS`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/context/StoreContext.tsx#L262).
+    - Wire checkout redirect and return handling in [`CheckoutView.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/views/CheckoutView.tsx).
+  - [ ] **Admin Dashboard Controls**: Add TomPay enable/disable switch and transaction reference inspector in [`AdminDashboardView.tsx`](file:///Users/mmaazfalak/antigravity/JutaKapra_backend/src/views/AdminDashboardView.tsx).
+
+---
+
 ## 4. Next Steps
-1. All order confirmation, admin dispatch, OTP, and abandoned cart reminder emails are now active and delivering directly from `support@jutakapra.store`.
-2. Deployment URL email function remains cleanly paused until user decides to re-enable it.
+1. Implement the backend TomPay service and checkout routes.
+2. Register TomPay in the frontend checkout view.
+3. Test payment initialization and webhook callback.

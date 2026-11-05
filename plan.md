@@ -132,7 +132,87 @@ Previously, the store triggered duplicate or triplicate confirmation emails for 
 
 ---
 
-## 5. Verification & Testing Matrix
+## 5. Feature 4: TomPay Payment Gateway Integration
+
+### 5.1 Overview & Objective
+Integrate **TomPay** as a direct digital card/wallet payment gateway for [Juta Kapra](https://www.jutakapra.store) enabling customers to pay online via Visa, Mastercard, and digital wallets, with instant webhook verification, automated order confirmation, and zero client-side credential exposure.
+
+### 5.2 Key Credentials & Environment Configuration
+> [!IMPORTANT]
+> Live API credentials must reside strictly on the server in `.env` and are never committed to version control or pushed to GitHub:
+> - `TOMPAY_API_KEY=tp_live_********************************`
+> - `TOMPAY_API_SECRET=tp_secret_********************************`
+> - `TOMPAY_API_BASE_URL=https://api.tompayment.com/v1` (or official merchant endpoint)
+> - `TOMPAY_WEBHOOK_SECRET=tp_secret_********************************`
+
+### 5.3 Backend Architecture (`JutaKapra_backend`)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Customer as Customer (Browser)
+    participant Front as Frontend (CheckoutView)
+    participant API as Backend API (/api/payments/tompay)
+    participant TomPay as TomPay Gateway Server
+    participant Email as Email Service (support@jutakapra.store)
+
+    Customer->>Front: Selects "TomPay" & clicks "Complete Order"
+    Front->>API: POST /api/payments/tompay/create-checkout (order details)
+    API->>TomPay: POST /checkouts (Authorization: Bearer tp_secret_...)
+    TomPay-->>API: Returns { checkoutUrl, paymentId }
+    API-->>Front: Returns { success: true, redirectUrl }
+    Front->>TomPay: Redirects customer to secure TomPay Hosted Checkout
+    Customer->>TomPay: Submits Card / Wallet Payment
+    TomPay->>API: POST /api/payments/tompay/webhook (payment.succeeded)
+    API->>API: Validates webhook signature & updates Order status to "Confirmed"
+    API->>Email: Dispatches Order Confirmed Email from support@jutakapra.store
+    TomPay-->>Customer: Redirects back to jutakapra.store/orders?orderId=...
+    Customer->>Front: Views confirmed archival receipt
+```
+
+#### Endpoints:
+1. **`POST /api/payments/tompay/create-checkout`**:
+   - Payload: `{ orderId, amount, currency: 'PKR', customer: { name, email, phone }, returnUrl, cancelUrl }`.
+   - Action: Prepares authenticated request to TomPay API using `tp_secret_...`, returns hosted checkout link.
+2. **`POST /api/payments/tompay/webhook`**:
+   - Action: Validates HMAC/SHA-256 signature against `TOMPAY_API_SECRET`.
+   - Event Handling:
+     - `payment.succeeded`: Sets order status to `Confirmed`, records `transactionId`, and sends confirmation email from `support@jutakapra.store`.
+     - `payment.failed`: Records failure reason, keeps order open for retry.
+3. **`GET /api/payments/tompay/verify/:orderId`**:
+   - Client polling / redirect verification endpoint ensuring order status sync if webhook is delayed.
+
+### 5.4 Frontend Architecture (`Jutakapra_Frontend`)
+
+1. **Gateway Registration ([`StoreContext.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/context/StoreContext.tsx))**:
+   - Add `gw-tompay` to `INITIAL_GATEWAYS`:
+     ```typescript
+     {
+       id: 'gw-tompay',
+       type: 'card',
+       title: 'TomPay (Credit / Debit Card & Wallets)',
+       providerName: 'TomPay Secure Gateway',
+       isEnabled: true,
+       disclaimerNote: 'Instant online authorization via 256-bit encrypted TomPay gateway.',
+       updatedAt: new Date().toISOString(),
+     }
+     ```
+2. **Checkout Submission Flow ([`CheckoutView.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/views/CheckoutView.tsx))**:
+   - When customer selects `gw-tompay` and submits order:
+     - Creates order locally and in database in `Pending Payment` state.
+     - Calls `/api/payments/tompay/create-checkout`.
+     - Window seamlessly redirects to `checkoutUrl`.
+3. **Receipt & Return Handler ([`CustomerOrdersView.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/views/CustomerOrdersView.tsx))**:
+   - Handles return query parameters `?tompay_status=success&orderId=...`.
+   - Displays real-time confirmation badge and clears active cart.
+
+### 5.5 Admin Dashboard Controls ([`AdminDashboardView.tsx`](file:///Users/mmaazfalak/antigravity/JutaKapra_backend/src/views/AdminDashboardView.tsx))
+- **Gateway Toggle**: Enable or disable TomPay live without redeploying.
+- **Transaction Logs**: View TomPay reference IDs, card brand/type, authorization timestamps, and transaction status in Order Inspection modal.
+
+---
+
+## 6. Verification & Testing Matrix
 
 - [ ] **Cart Navigation Test**: Click Bag on mobile dock -> navigates to `/cart`; verify `<Header />` and `<MobileAppNavBar />` remain visible.
 - [ ] **Desktop Floating Bag Test**: Click floating cart button on desktop -> navigates to `/cart`; button hides or stays neutral.
