@@ -6,14 +6,14 @@ dotenv.config();
 const SUPABASE_URL =
   process.env.SUPABASE_URL ||
   process.env.VITE_SUPABASE_URL ||
-  '';
+  'https://kbdrlhiishmetsddlstq.supabase.co';
 
 const SUPABASE_SERVICE_ROLE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_SECRET_KEY ||
   process.env.SUPABASE_PUBLISHABLE_KEY ||
   process.env.VITE_SUPABASE_ANON_KEY ||
-  '';
+  'sb_publishable_r4PIdoHdJ5606fytYnajYA_DV0ekz1d';
 
 let supabaseClient: SupabaseClient | null = null;
 
@@ -268,7 +268,6 @@ export async function syncProfileToSupabase(user: {
       auth_provider: user.authProvider || existingProfile?.auth_provider || 'email',
       role: finalRole,
       status: finalStatus,
-      address: finalAddress,
       default_shipping_address: finalAddress,
       city: finalCity,
       state: finalState,

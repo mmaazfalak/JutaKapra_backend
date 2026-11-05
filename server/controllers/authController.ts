@@ -595,12 +595,62 @@ export async function changePassword(req: AuthenticatedRequest, res: Response): 
   try {
     const { currentPassword, newPassword, confirmPassword, email, userId } = req.body || {};
 
+    const cleanEmail = email ? String(email).toLowerCase().trim() : undefined;
+    const cleanId = userId ? String(userId).trim() : undefined;
+
     let user = req.user;
-    if (!user && email) {
-      user = await db.findUserByEmail(String(email).trim());
+    if (!user && cleanEmail) {
+      user = await db.findUserByEmail(cleanEmail);
     }
-    if (!user && userId) {
-      user = await db.findUserById(String(userId).trim());
+    if (!user && cleanId) {
+      user = await db.findUserById(cleanId);
+    }
+
+    // Direct Supabase profile resolution fallback
+    if (!user && (cleanEmail || cleanId)) {
+      const supa = getSupabaseAdmin();
+      if (supa) {
+        try {
+          let q = supa.from('profiles').select('*');
+          if (cleanEmail) q = q.ilike('email', cleanEmail);
+          else if (cleanId) q = q.eq('id', cleanId);
+          const { data: prof } = await q.maybeSingle();
+          if (prof) {
+            user = {
+              id: prof.id,
+              _id: prof.id,
+              fullName: prof.full_name || cleanEmail?.split('@')[0] || 'Customer',
+              name: prof.full_name || cleanEmail?.split('@')[0] || 'Customer',
+              email: prof.email || cleanEmail || '',
+              phone: prof.phone || '',
+              role: prof.role || 'customer',
+              status: prof.status || 'active',
+              authProvider: prof.auth_provider || 'google',
+              avatarUrl: prof.avatar_url || '',
+              passwordHash: prof.password_hash || '',
+              createdAt: prof.created_at || new Date().toISOString(),
+              updatedAt: prof.updated_at || new Date().toISOString(),
+            };
+          }
+        } catch (e: any) {
+          console.warn('[ChangePassword Supabase Profile lookup notice]:', e.message);
+        }
+      }
+    }
+
+    // If account was created via Google client-side and not yet in backend DB, bootstrap it now
+    if (!user && cleanEmail) {
+      try {
+        user = await db.createUser({
+          id: cleanId,
+          fullName: cleanEmail.split('@')[0],
+          email: cleanEmail,
+          authProvider: 'google',
+          role: 'customer',
+        });
+      } catch (err: any) {
+        user = await db.findUserByEmail(cleanEmail);
+      }
     }
 
     if (!user) {
@@ -652,14 +702,14 @@ export async function changePassword(req: AuthenticatedRequest, res: Response): 
       console.warn('[Supabase Change Password Warning]:', supaErr.message);
     }
 
-    if (updated) {
-      setAuthSessionCookie(res, updated);
-    }
+    const finalUser = updated || user;
+    const token = setAuthSessionCookie(res, finalUser);
 
     res.status(200).json({
       success: true,
       message: 'Password has been set up successfully! You can now log in with your email and password on any device.',
-      user: updated ? sanitizeUser(updated) : undefined,
+      user: sanitizeUser(finalUser),
+      token,
     });
   } catch (error: any) {
     console.error('Change password error:', error);
