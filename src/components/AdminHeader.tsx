@@ -595,14 +595,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ onOpenMobileMenu }) =>
                 ))}
               </div>
 
-              <div className="pt-2 border-t border-black/10 dark:border-white/10 flex items-center justify-between">
-                <button
-                  onClick={triggerTestNotification}
-                  className="w-full text-center py-1.5 px-3 rounded-lg bg-[#e5341f] hover:bg-[#d22d1a] text-white text-xs font-semibold transition-colors cursor-pointer"
-                >
-                  Test Auto-Dismiss Notification (3.5s)
-                </button>
-              </div>
+
             </div>
           )}
         </div>

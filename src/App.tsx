@@ -4,7 +4,6 @@ import { AdminLayout } from './components/AdminLayout';
 import { AdminDashboardView } from './views/AdminDashboardView';
 import { AdminLoginView } from './views/AdminLoginView';
 import { CommandKModal } from './components/CommandKModal';
-import { ToastContainer } from './components/ToastContainer';
 import { ExternalLink, ShieldCheck } from 'lucide-react';
 
 const FRONTEND_URL = (import.meta as any).env?.VITE_FRONTEND_URL || 'https://www.jutakapra.store';
@@ -42,7 +41,6 @@ const AdminPortalShell: React.FC = () => {
           </a>
         </div>
         <AdminLoginView />
-        <ToastContainer />
       </div>
     );
   }
@@ -53,7 +51,6 @@ const AdminPortalShell: React.FC = () => {
         <AdminDashboardView />
       </AdminLayout>
       <CommandKModal />
-      <ToastContainer />
     </>
   );
 };

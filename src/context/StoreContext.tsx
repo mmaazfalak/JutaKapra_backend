@@ -2502,23 +2502,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch {}
   }, [staffMembers]);
 
-  // Toasts
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
-
-  const removeToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  const addToast = (toast: Omit<ToastMessage, 'id'>) => {
-    const id = Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
-    const duration = toast.duration ?? 3500;
-    const newToast: ToastMessage = { ...toast, id, duration };
-    setToasts((prev) => [...prev, newToast]);
-
-    setTimeout(() => {
-      removeToast(id);
-    }, duration);
-  };
+  // Toasts permanently disabled per user preference
+  const toasts: ToastMessage[] = [];
+  const removeToast = (_id: string) => {};
+  const addToast = (_toast: Omit<ToastMessage, 'id'>) => {};
 
   // Navigation action
   const navigateTo = (view: string, param?: string) => {
