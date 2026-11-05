@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.1] - 2026-11-06
+
+### Changed
+- **Dedicated SMTP Sender (`support@jutakapra.store`)**: Standardized all transactional and marketing notification emails (Order Placed, Order Confirmed, Order Dispatched with Delivery Date, Password Reset OTP, 10-Hour Cart Recovery) to send directly via authenticated Namecheap Private Email SMTP from `"Juta Kapra" <support@jutakapra.store>` with `replyTo: support@jutakapra.store`.
+- **Frontend Direct Backend Relay**: Configured `sendNotificationEmail` in `src/lib/emailService.ts` to dispatch email payloads to `/api/auth/send-email` and `/api/email/send`, guaranteeing zero reliance on external script urls.
+
+### Deprecated / Paused
+- **Paused Deployment URL Email Function**: Explicitly paused `GAS_DEPLOYMENT_URL` and `GOOGLE_SHEETS_WEBHOOK_URL` email dispatching across both frontend and backend (`PAUSE_DEPLOYMENT_URL_EMAILS = true`), preventing external Google Apps Script execution for emails.
+
+---
+
 ## [1.3.0] - 2026-11-05
 
 ### Added

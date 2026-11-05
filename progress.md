@@ -1,7 +1,7 @@
 # Progress Tracker & Task Status
 
 **Project**: Juta Kapra E-Commerce Platform  
-**Last Updated**: November 5, 2026, 15:30 PKT  
+**Last Updated**: November 6, 2026, 02:00 PKT  
 **Branch**: `main`  
 **Production URLs**:
 - Front-End: [https://www.jutakapra.store](https://www.jutakapra.store)
@@ -18,7 +18,8 @@
 | **Cart / Bag Dedicated Page** | 1 | 1 | 0 | 0 |
 | **Auth & Password Security** | 1 | 1 | 0 | 0 |
 | **Email Lifecycle & Admin Overhaul** | 1 | 1 | 0 | 0 |
-| **Total** | **5** | **5 (100%)** | **0 (0%)** | **0** |
+| **support@jutakapra.store SMTP & Pause GAS** | 1 | 1 | 0 | 0 |
+| **Total** | **6** | **6 (100%)** | **0 (0%)** | **0** |
 
 ---
 
@@ -114,6 +115,20 @@
 
 ---
 
+### Milestone 6: Dedicated SMTP Sender (`support@jutakapra.store`) & Pause GAS Deployment URL
+- **Goal**: Send all emails from `support@jutakapra.store` using authenticated SMTP; strictly pause the deployment URL email function.
+- **Status**: 100% Completed & Deployed
+- **Commits**: `764d21b` (Frontend), `0be29b7` (Backend)
+- **Subtask Checklist**:
+  - [x] **Verified PrivateEmail SMTP Credentials**: Verified `mail.privateemail.com` on port 465 SSL using `support@jutakapra.store`, generating Message IDs `@jutakapra.store`.
+  - [x] **Set Direct SMTP Headers**: Configured `from: '"Juta Kapra" <support@jutakapra.store>'` and `replyTo: 'support@jutakapra.store'` across all backend mailers.
+  - [x] **Strictly Paused Deployment URL Sending**: Added `PAUSE_DEPLOYMENT_URL_EMAILS = true` in frontend and backend `emailService.ts`, `sheetsService.ts`, and `webhookService.ts`, preventing any email delivery attempts through Google Apps Script deployment URL.
+  - [x] **Frontend Direct Backend Relay**: Updated `sendNotificationEmail` in [`src/lib/emailService.ts`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/lib/emailService.ts) to dispatch payloads directly to `/api/auth/send-email` and `/api/email/send`.
+  - [x] **Admin Order Confirmed Email**: Added `sendOrderConfirmedEmail` to backend `emailService.ts` and `orderController.ts` triggering notification from `support@jutakapra.store` when orders are confirmed.
+  - [x] **Deploy & Verify**: Both frontend and backend built with 0 errors and deployed to production.
+
+---
+
 ## 4. Next Steps
-1. User provides new Google Apps Script deployment URL to paste into `GAS_DEPLOYMENT_URL` when ready.
-2. Monitor production orders and cart recovery logs on [https://www.jutakapra.store](https://www.jutakapra.store).
+1. All order confirmation, admin dispatch, OTP, and abandoned cart reminder emails are now active and delivering directly from `support@jutakapra.store`.
+2. Deployment URL email function remains cleanly paused until user decides to re-enable it.
