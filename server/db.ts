@@ -500,6 +500,8 @@ export const db = {
           state: userDoc.state || '',
           postalCode: userDoc.postalCode || '',
           country: userDoc.country || '',
+          passwordHash: userDoc.passwordHash || (userDoc as any).password || '',
+          password: (userDoc as any).password || userDoc.passwordHash || '',
           createdAt: userDoc.createdAt.toISOString(),
           updatedAt: userDoc.updatedAt.toISOString(),
           lastLoginAt: userDoc.lastLoginAt ? userDoc.lastLoginAt.toISOString() : undefined,

@@ -722,15 +722,20 @@ export async function changePassword(req: AuthenticatedRequest, res: Response): 
 
     // If user already had a password set, require and verify the current password
     if (user.passwordHash) {
-      if (currentPassword) {
-        const isMatch = await verifyPassword(currentPassword, user.passwordHash);
-        if (!isMatch) {
-          res.status(400).json({
-            success: false,
-            message: 'Current password is incorrect.',
-          });
-          return;
-        }
+      if (!currentPassword) {
+        res.status(400).json({
+          success: false,
+          message: 'Current password is required to update your existing password.',
+        });
+        return;
+      }
+      const isMatch = await verifyPassword(currentPassword, user.passwordHash);
+      if (!isMatch) {
+        res.status(400).json({
+          success: false,
+          message: 'Current password is incorrect.',
+        });
+        return;
       }
     }
 
