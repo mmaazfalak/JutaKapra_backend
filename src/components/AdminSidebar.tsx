@@ -50,6 +50,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     orders,
     supportTickets,
     stores,
+    customers,
     adminRole,
     currentStoreId,
     themeMode,
@@ -101,7 +102,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         {
           title: 'CRM & USERS',
           items: [
-            { id: 'customers', label: 'Customers', icon: Users },
+            {
+              id: 'customers',
+              label: 'Customers',
+              icon: Users,
+              badge: customers.length > 0 ? customers.length : undefined,
+              badgeColor: 'bg-emerald-500/20 text-emerald-400',
+            },
             { id: 'reviews', label: 'Reviews', icon: Star },
             {
               id: 'support',
@@ -217,7 +224,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       {(!isSidebarCollapsed || isMobileView) && (
         <div className="px-3 py-1.5 border-t border-dashed border-neutral-700/50">
           <a
-            href={(import.meta as any).env?.VITE_FRONTEND_URL || 'https://jutakaprafrontend.vercel.app'}
+            href={(import.meta as any).env?.VITE_FRONTEND_URL || 'https://www.jutakapra.store'}
             target="_blank"
             rel="noopener noreferrer"
             className={`flex items-center space-x-2 text-xs py-2 px-2.5 rounded-lg transition-colors ${isDark ? 'text-neutral-400 hover:text-white hover:bg-[#1a202c]' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'}`}

@@ -7,7 +7,7 @@ import { CommandKModal } from './components/CommandKModal';
 import { ToastContainer } from './components/ToastContainer';
 import { ExternalLink, ShieldCheck } from 'lucide-react';
 
-const FRONTEND_URL = (import.meta as any).env?.VITE_FRONTEND_URL || 'https://jutakaprafrontend.vercel.app';
+const FRONTEND_URL = (import.meta as any).env?.VITE_FRONTEND_URL || 'https://www.jutakapra.store';
 
 const AdminPortalShell: React.FC = () => {
   const { currentView, navigateTo, themeMode, isAdminLoggedIn, adminRole } = useStore();

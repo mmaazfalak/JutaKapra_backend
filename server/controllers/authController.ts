@@ -86,10 +86,11 @@ function setAuthSessionCookie(res: Response, user: UserRecord): string {
     { expiresIn: '7d' }
   );
 
+  const isProd = process.env.NODE_ENV === 'production';
   res.cookie('token', token, {
     httpOnly: true,
-    secure: COOKIE_SECURE,
-    sameSite: 'lax',
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     path: '/',
   });
@@ -891,48 +892,105 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
  */
 export async function listUsers(_req: Request, res: Response): Promise<void> {
   try {
+    const userMap = new Map<string, any>();
+
+    // 1. Fetch from local backend database (MongoDB / FileDB)
+    try {
+      const allDbUsers = await db.getAllUsers();
+      for (const u of allDbUsers) {
+        if (u.email) {
+          const key = u.email.toLowerCase().trim();
+          userMap.set(key, sanitizeUser(u));
+        }
+      }
+    } catch (e: any) {
+      console.warn('[listUsers] db.getAllUsers error:', e.message);
+    }
+
+    // 2. Fetch from Supabase (both public.profiles and auth.users)
     const supabase = getSupabaseAdmin();
     if (supabase) {
-      const { data: supaProfiles, error: supaErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // 2a. Profiles table
+      try {
+        const { data: supaProfiles, error: supaErr } = await supabase
+          .from('profiles')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-      if (!supaErr && Array.isArray(supaProfiles)) {
-        const users = supaProfiles.map((p) => ({
-          id: p.id,
-          fullName: p.full_name || p.email.split('@')[0],
-          name: p.full_name || p.email.split('@')[0],
-          email: p.email,
-          phone: p.phone || '',
-          role: p.role || 'customer',
-          status: p.status || 'active',
-          authProvider: p.auth_provider || 'email',
-          avatarUrl: p.avatar_url || '',
-          address: p.address || p.default_shipping_address || '',
-          city: p.city || 'Islamabad',
-          state: p.state || 'ICT',
-          postalCode: p.postal_code || '44000',
-          country: p.country || 'Pakistan',
-          createdAt: p.created_at,
-          lastLoginAt: p.last_login_at,
-        }));
+        if (!supaErr && Array.isArray(supaProfiles)) {
+          for (const p of supaProfiles) {
+            if (p.email) {
+              const key = p.email.toLowerCase().trim();
+              const existing = userMap.get(key) || {};
+              userMap.set(key, {
+                ...existing,
+                id: p.id || existing.id,
+                fullName: p.full_name || existing.fullName || p.email.split('@')[0],
+                name: p.full_name || existing.name || p.email.split('@')[0],
+                email: p.email,
+                phone: p.phone || existing.phone || '',
+                role: p.role || existing.role || 'customer',
+                status: p.status || existing.status || 'active',
+                authProvider: p.auth_provider || existing.authProvider || 'email',
+                avatarUrl: p.avatar_url || existing.avatarUrl || '',
+                address: p.address || p.default_shipping_address || existing.address || '',
+                city: p.city || existing.city || 'Islamabad',
+                state: p.state || existing.state || 'ICT',
+                postalCode: p.postal_code || existing.postalCode || '44000',
+                country: p.country || existing.country || 'Pakistan',
+                createdAt: p.created_at || existing.createdAt || new Date().toISOString(),
+                lastLoginAt: p.last_login_at || existing.lastLoginAt,
+              });
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn('[listUsers] supaProfiles fetch notice:', err.message);
+      }
 
-        res.status(200).json({
-          success: true,
-          count: users.length,
-          users,
-        });
-        return;
+      // 2b. Supabase Auth Users directly
+      try {
+        const { data: listData, error: authErr } = await supabase.auth.admin.listUsers();
+        if (!authErr && Array.isArray(listData?.users)) {
+          for (const au of listData.users) {
+            if (au.email) {
+              const key = au.email.toLowerCase().trim();
+              const existing = userMap.get(key);
+              if (!existing) {
+                const meta = au.user_metadata || {};
+                const name = meta.full_name || meta.name || au.email.split('@')[0];
+                userMap.set(key, {
+                  id: au.id,
+                  fullName: name,
+                  name: name,
+                  email: au.email,
+                  phone: au.phone || meta.phone || '',
+                  role: au.email.toLowerCase() === 'mmaazfalak@icloud.com' ? 'admin' : (meta.role || 'customer'),
+                  status: au.banned_until ? 'suspended' : 'active',
+                  authProvider: au.app_metadata?.provider || meta.provider || 'email',
+                  avatarUrl: meta.avatar_url || '',
+                  address: meta.address || '',
+                  city: meta.city || 'Islamabad',
+                  state: meta.state || 'ICT',
+                  postalCode: meta.postal_code || '44000',
+                  country: meta.country || 'Pakistan',
+                  createdAt: au.created_at,
+                  lastLoginAt: au.last_sign_in_at,
+                });
+              }
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn('[listUsers] Supabase auth.admin.listUsers notice:', err.message);
       }
     }
 
-    const allUsers = await db.getAllUsers();
-    const sanitized = allUsers.map(sanitizeUser);
+    const mergedUsers = Array.from(userMap.values());
     res.status(200).json({
       success: true,
-      count: sanitized.length,
-      users: sanitized,
+      count: mergedUsers.length,
+      users: mergedUsers,
     });
   } catch (error: any) {
     console.error('List users error:', error);
