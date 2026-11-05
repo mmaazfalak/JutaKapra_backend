@@ -9,7 +9,13 @@ import {
   verifyOTPHash,
 } from '../utils/crypto.js';
 import { sendWebhookToGoogleAppsScript, syncToGoogleSheets } from '../services/sheetsService.js';
-import { sendOTPEmail, sendWelcomeEmail } from '../services/emailService.js';
+import {
+  sendOTPEmail,
+  sendWelcomeEmail,
+  sendPasswordResetEmail,
+  sendAccountLoginNotificationEmail,
+  parseDeviceDetails,
+} from '../services/emailService.js';
 import { syncProfileToSupabase, getSupabaseAdmin, verifySupabaseAuth, updateSupabaseUserPassword } from '../services/supabaseService.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { OAuth2Client } from 'google-auth-library';
@@ -331,7 +337,47 @@ export async function login(req: Request, res: Response): Promise<void> {
       }
     } catch {}
 
-    await db.updateUser(user.id, { lastLoginAt: new Date().toISOString() });
+    // Device Detection & New Device / Unrecognized Location Login Notification
+    try {
+      const userAgent = (req.headers['user-agent'] as string) || '';
+      const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '';
+      const parsedDevice = parseDeviceDetails(userAgent, ip);
+
+      const knownDevices = (user as any).knownDevices || [];
+      const isKnown = knownDevices.some((d: any) => d.deviceKey === parsedDevice.deviceKey);
+
+      // If user already has known device history and this device is unrecognized, trigger security notification
+      if (knownDevices.length > 0 && !isKnown) {
+        sendAccountLoginNotificationEmail({
+          to: user.email,
+          name: user.fullName || user.email.split('@')[0],
+          device: parsedDevice.device,
+          browser: parsedDevice.browser,
+          os: parsedDevice.os,
+          ip: parsedDevice.ip,
+          timestamp: new Date().toISOString(),
+        }).catch((err) => console.warn('[Login Notification Email Notice]:', err.message));
+      }
+
+      // Record device into knownDevices list (keep up to 10)
+      const updatedDevices = [
+        {
+          ...parsedDevice,
+          lastLoginAt: new Date().toISOString(),
+        },
+        ...knownDevices.filter((d: any) => d.deviceKey !== parsedDevice.deviceKey),
+      ].slice(0, 10);
+
+      user.knownDevices = updatedDevices;
+      await db.updateUser(user.id, {
+        lastLoginAt: new Date().toISOString(),
+        knownDevices: updatedDevices,
+      });
+    } catch (devErr: any) {
+      console.warn('[Device Detection Notice]:', devErr.message);
+      await db.updateUser(user.id, { lastLoginAt: new Date().toISOString() });
+    }
+
     const token = setAuthSessionCookie(res, user);
 
     res.status(200).json({
@@ -748,13 +794,21 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
     // Generate secure 6-digit numeric OTP and SHA-256 hash
     const { otp, otpHash } = generateSecureOTP();
 
+    // Generate secure 24-hour reset token
+    const resetToken = jwt.sign(
+      { userId: user.id, email: user.email, type: 'pwd_reset' },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
     // Store OTP on user document with 10-minute expiry
     await db.createPasswordResetOTP(user.id, otpHash, OTP_EXPIRATION_MINUTES);
 
-    // Dispatch OTP email directly via support@jutakapra.store
-    await sendOTPEmail({
+    // Dispatch Password Reset email (with 24h reset link & instant 6-digit OTP code)
+    await sendPasswordResetEmail({
       to: user.email,
       name: user.fullName || user.email.split('@')[0],
+      token: resetToken,
       otp: otp,
     });
 
@@ -1178,6 +1232,10 @@ export async function googleLogin(req: Request, res: Response): Promise<void> {
     const adminEmails = ['admin@jutakapra.com', 'mmaazfalak@icloud.com'];
     const role: 'admin' | 'customer' = adminEmails.includes(email) ? 'admin' : 'customer';
 
+    // Check if user is newly signing up or returning
+    const priorUser = await db.findUserByEmail(email);
+    const isNewUser = !priorUser;
+
     // Persist or Link in MongoDB
     const savedUser = await db.upsertGoogleUser({
       googleId: googleUserId,
@@ -1186,6 +1244,53 @@ export async function googleLogin(req: Request, res: Response): Promise<void> {
       avatarUrl: picture,
       role: role,
     });
+
+    // If new user, trigger Welcome Email instantly
+    if (isNewUser) {
+      sendWelcomeEmail({
+        to: email,
+        name: name,
+      }).catch((err) => console.warn('[Google Auth Welcome Email Notice]:', err.message));
+    }
+
+    // Device Detection & Unrecognized Device Security Notification
+    try {
+      const userAgent = (req.headers['user-agent'] as string) || '';
+      const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '';
+      const parsedDevice = parseDeviceDetails(userAgent, ip);
+
+      const knownDevices = (savedUser as any).knownDevices || priorUser?.knownDevices || [];
+      const isKnown = knownDevices.some((d: any) => d.deviceKey === parsedDevice.deviceKey);
+
+      // If returning user has device history and this device is unrecognized, trigger alert
+      if (!isNewUser && knownDevices.length > 0 && !isKnown) {
+        sendAccountLoginNotificationEmail({
+          to: email,
+          name: name,
+          device: parsedDevice.device,
+          browser: parsedDevice.browser,
+          os: parsedDevice.os,
+          ip: parsedDevice.ip,
+          timestamp: new Date().toISOString(),
+        }).catch((err) => console.warn('[Google Login Security Alert Notice]:', err.message));
+      }
+
+      const updatedDevices = [
+        {
+          ...parsedDevice,
+          lastLoginAt: new Date().toISOString(),
+        },
+        ...knownDevices.filter((d: any) => d.deviceKey !== parsedDevice.deviceKey),
+      ].slice(0, 10);
+
+      savedUser.knownDevices = updatedDevices;
+      await db.updateUser(savedUser.id, {
+        lastLoginAt: new Date().toISOString(),
+        knownDevices: updatedDevices,
+      });
+    } catch (devErr: any) {
+      console.warn('[Google Auth Device Detection Notice]:', devErr.message);
+    }
 
     // Non-blocking Google Sheets Webhook Dispatch
     syncToGoogleSheets({

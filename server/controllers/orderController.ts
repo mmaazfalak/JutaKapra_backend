@@ -2,7 +2,12 @@ import { Request, Response } from 'express';
 import { OrderModel } from '../models/order.model.js';
 import { syncToGoogleSheets } from '../services/sheetsService.js';
 import { syncOrderToSupabase } from '../services/supabaseService.js';
-import { sendOrderConfirmationEmail } from '../services/emailService.js';
+import {
+  sendOrderConfirmationEmail,
+  sendShippingFulfillmentEmail,
+  sendOrderCancellationEmail,
+  sendReviewRequestEmail,
+} from '../services/emailService.js';
 import { FileDB } from '../services/fileDatabase.js';
 import mongoose from 'mongoose';
 
@@ -96,6 +101,11 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
       await syncOrderToSupabase(savedOrder);
     } catch (e: any) {
       console.warn('[Supabase Create Order Warning]:', e.message);
+    }
+
+    // Clear active shopping cart so abandoned cart emails are never dispatched for completed orders
+    if (savedOrder.customer?.email) {
+      FileDB.deleteCart(savedOrder.customer.email);
     }
 
     // Send Order Confirmation Email via support@jutakapra.store (non-blocking)
@@ -217,6 +227,25 @@ export async function updateOrderStatus(req: Request, res: Response): Promise<vo
       syncOrderToSupabase(updatedOrder).catch((e) =>
         console.warn('[Supabase Update Order Status Warning]:', e.message)
       );
+    }
+
+    // EMAIL 5: Shipping & Fulfillment Notice Trigger
+    if (['Dispatched', 'Shipped', 'Dispatched to Courier', 'In Transit'].includes(status) && updatedOrder) {
+      sendShippingFulfillmentEmail({
+        order: updatedOrder,
+        courierName: courierUsed || updatedOrder.courier,
+        trackingNumber: trackingNum || updatedOrder.trackingNumber,
+        trackingUrl: trackingUrl || updatedOrder.courierTracking?.trackingUrl,
+        deliveryTimeframe: '2 to 4 business days nationwide',
+      }).catch((e) => console.warn('[Shipping Email Dispatch Warning]:', e.message));
+    }
+
+    // EMAIL 6: Order Cancellation / Refund Notice Trigger
+    if (['Cancelled', 'Canceled', 'Refunded'].includes(status) && updatedOrder) {
+      sendOrderCancellationEmail({
+        order: updatedOrder,
+        reason: dispatchNote || req.body.reason || 'Requested by customer / inventory verification update',
+      }).catch((e) => console.warn('[Cancellation Email Dispatch Warning]:', e.message));
     }
 
     res.status(200).json({
@@ -357,6 +386,159 @@ export async function listOrders(_req: Request, res: Response): Promise<void> {
   } catch (error: any) {
     console.error('List orders error:', error);
     res.status(500).json({ success: false, message: 'Failed to retrieve orders', error: error.message });
+  }
+}
+
+/**
+ * 4. POST /api/orders/:id/cancel (Cancel Order & Trigger Refund / Cancellation Notice)
+ */
+export async function cancelOrder(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body || {};
+    const cancelReason = reason || 'Order cancellation requested by customer';
+
+    let order = FileDB.getOrders().find((o) => o.id === id || o.orderNumber === id);
+    if (!order && mongoose.connection.readyState === 1) {
+      try {
+        order = await OrderModel.findOne({ $or: [{ orderNumber: id }, { _id: id }] }).exec();
+      } catch {}
+    }
+
+    if (!order) {
+      res.status(404).json({ success: false, message: 'Order not found.' });
+      return;
+    }
+
+    order.status = 'Cancelled';
+    order.cancellationReason = cancelReason;
+    order.cancelledAt = new Date().toISOString();
+
+    FileDB.saveOrder(order);
+
+    if (mongoose.connection.readyState === 1 && order._id) {
+      try {
+        await OrderModel.findByIdAndUpdate(order._id, {
+          status: 'Cancelled',
+          cancellationReason: cancelReason,
+        }).exec();
+      } catch {}
+    }
+
+    try {
+      await syncOrderToSupabase(order);
+    } catch {}
+
+    // Dispatch Order Cancellation / Refund Email
+    await sendOrderCancellationEmail({
+      order,
+      reason: cancelReason,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Order #${order.orderNumber || id} has been canceled and refund notification sent.`,
+      order,
+    });
+  } catch (error: any) {
+    console.error('Cancel order error:', error);
+    res.status(500).json({ success: false, message: 'Failed to cancel order.', error: error.message });
+  }
+}
+
+/**
+ * 5. POST /api/orders/:id/send-review-request (Manual Staff Trigger for Review Request)
+ */
+export async function sendReviewRequestForOrder(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    let order = FileDB.getOrders().find((o) => o.id === id || o.orderNumber === id);
+    if (!order && mongoose.connection.readyState === 1) {
+      try {
+        order = await OrderModel.findOne({ $or: [{ orderNumber: id }, { _id: id }] }).exec();
+      } catch {}
+    }
+
+    if (!order) {
+      res.status(404).json({ success: false, message: 'Order not found.' });
+      return;
+    }
+
+    const email = order.customer?.email || order.user?.email || order.guestEmail;
+    if (!email) {
+      res.status(400).json({ success: false, message: 'Order does not have a customer email address.' });
+      return;
+    }
+
+    await sendReviewRequestEmail({
+      to: email,
+      name: order.customer?.fullName || order.shippingAddress?.fullName,
+      orderNumber: order.orderNumber || id,
+      items: order.items || [],
+    });
+
+    order.reviewEmailSent = true;
+    order.reviewEmailSentAt = new Date().toISOString();
+    FileDB.saveOrder(order);
+
+    res.status(200).json({
+      success: true,
+      message: `Review request email sent to ${email} for order #${order.orderNumber || id}.`,
+    });
+  } catch (error: any) {
+    console.error('Send review request error:', error);
+    res.status(500).json({ success: false, message: 'Failed to send review request.', error: error.message });
+  }
+}
+
+/**
+ * 6. GET /api/cron/review-requests (Automated Cron / Timeline Checker: 7 to 10 days post-delivery)
+ */
+export async function cronReviewRequests(_req: Request, res: Response): Promise<void> {
+  try {
+    const orders = FileDB.getOrders();
+    const now = Date.now();
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    const TEN_DAYS_MS = 10 * 24 * 60 * 60 * 1000;
+
+    const eligibleOrders = orders.filter((o) => {
+      if (o.status !== 'Delivered' || o.reviewEmailSent) return false;
+      const deliveryDate = o.deliveredAt ? new Date(o.deliveredAt).getTime() : new Date(o.updatedAt || o.createdAt).getTime();
+      const diff = now - deliveryDate;
+      // Trigger between 7 and 10 days, or if delivered >= 7 days ago
+      return diff >= SEVEN_DAYS_MS;
+    });
+
+    const sentOrders: string[] = [];
+    for (const order of eligibleOrders) {
+      const email = order.customer?.email || order.user?.email || order.guestEmail;
+      if (email) {
+        try {
+          await sendReviewRequestEmail({
+            to: email,
+            name: order.customer?.fullName,
+            orderNumber: order.orderNumber || order.id,
+            items: order.items || [],
+          });
+          order.reviewEmailSent = true;
+          order.reviewEmailSentAt = new Date().toISOString();
+          FileDB.saveOrder(order);
+          sentOrders.push(order.orderNumber || order.id);
+        } catch (e: any) {
+          console.warn(`[Review Cron Error for ${order.orderNumber}]:`, e.message);
+        }
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Processed review request timeline. Dispatched ${sentOrders.length} emails.`,
+      dispatchedCount: sentOrders.length,
+      orders: sentOrders,
+    });
+  } catch (error: any) {
+    console.error('Cron review requests error:', error);
+    res.status(500).json({ success: false, message: 'Review requests cron failed.', error: error.message });
   }
 }
 

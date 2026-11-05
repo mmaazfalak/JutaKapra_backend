@@ -36,6 +36,14 @@ export interface UserRecord {
   defaultShippingAddress?: string;
   resetOtp?: string | null;
   resetOtpExpires?: Date | string | null;
+  knownDevices?: Array<{
+    deviceKey: string;
+    device: string;
+    browser: string;
+    os: string;
+    ip: string;
+    lastLoginAt: string;
+  }>;
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;

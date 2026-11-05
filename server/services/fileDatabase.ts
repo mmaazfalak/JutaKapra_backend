@@ -10,6 +10,7 @@ const DATA_DIR = path.resolve(__dirname, '../data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 const PRODUCTS_FILE = path.join(DATA_DIR, 'products.json');
+const CARTS_FILE = path.join(DATA_DIR, 'carts.json');
 
 // Ensure directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -218,5 +219,54 @@ export const FileDB = {
 
   saveProducts(products: any[]): void {
     writeJsonAtomic(PRODUCTS_FILE, products);
+  },
+
+  // CARTS DATABASE (for Abandoned Cart Recovery 1-24h pipeline)
+  getCarts(): any[] {
+    return readJsonSafe<any[]>(CARTS_FILE, []);
+  },
+
+  saveCarts(carts: any[]): void {
+    writeJsonAtomic(CARTS_FILE, carts);
+  },
+
+  saveCart(cart: any): any {
+    const carts = this.getCarts();
+    const emailKey = (cart.email || cart.customerEmail || '').toLowerCase().trim();
+    const idx = carts.findIndex(
+      (c) => (emailKey && (c.email || c.customerEmail || '').toLowerCase().trim() === emailKey) || (cart.id && c.id === cart.id)
+    );
+    const cartRecord = {
+      ...cart,
+      id: cart.id || 'cart-' + Date.now().toString(36),
+      updatedAt: new Date().toISOString(),
+      createdAt: cart.createdAt || new Date().toISOString(),
+    };
+    if (idx >= 0) {
+      carts[idx] = { ...carts[idx], ...cartRecord };
+    } else {
+      carts.unshift(cartRecord);
+    }
+    this.saveCarts(carts);
+    return cartRecord;
+  },
+
+  getCartByEmail(email: string): any | null {
+    const normalized = email.toLowerCase().trim();
+    const carts = this.getCarts();
+    return carts.find((c) => (c.email || c.customerEmail || '').toLowerCase().trim() === normalized) || null;
+  },
+
+  deleteCart(emailOrId: string): boolean {
+    const normalized = emailOrId.toLowerCase().trim();
+    const carts = this.getCarts();
+    const filtered = carts.filter(
+      (c) => c.id !== emailOrId && (c.email || c.customerEmail || '').toLowerCase().trim() !== normalized
+    );
+    const changed = filtered.length !== carts.length;
+    if (changed) {
+      this.saveCarts(filtered);
+    }
+    return changed;
   },
 };

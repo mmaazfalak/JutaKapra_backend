@@ -6,6 +6,8 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
+import emailRoutes from './routes/emailRoutes.js';
+import cartRoutes from './routes/cartRoutes.js';
 
 dotenv.config();
 
@@ -53,10 +55,13 @@ app.get('/api/health', (_req, res) => {
   res.status(200).json({ status: 'ok', service: 'juta-kapra-backend-api', timestamp: new Date().toISOString() });
 });
 
-// Authentication & Admin API Subsystem
+// Authentication, Orders, Carts & Email Subsystems
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', authRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/cart', cartRoutes);
+app.use('/api/email', emailRoutes);
+app.use('/api/cron', emailRoutes);
 app.use('/api', authRoutes);
 
 // Fallback 404
@@ -64,7 +69,7 @@ app.use('/api/*', (_req, res) => {
   res.status(404).json({ success: false, message: 'API Route Not Found' });
 });
 
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL && !process.env.NO_LISTEN) {
   app.listen(PORT, () => {
     console.log(`⚡ [Auth Server] Juta Kapra Authentication Service running on http://localhost:${PORT}`);
   });
