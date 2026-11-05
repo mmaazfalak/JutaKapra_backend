@@ -9,6 +9,7 @@ import {
   verifyOTPHash,
 } from '../utils/crypto.js';
 import { sendWebhookToGoogleAppsScript, syncToGoogleSheets } from '../services/sheetsService.js';
+import { sendOTPEmail, sendWelcomeEmail } from '../services/emailService.js';
 import { syncProfileToSupabase, getSupabaseAdmin, verifySupabaseAuth, updateSupabaseUserPassword } from '../services/supabaseService.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { OAuth2Client } from 'google-auth-library';
@@ -185,6 +186,12 @@ export async function register(req: Request, res: Response): Promise<void> {
     } catch (e: any) {
       console.warn('[Supabase Sync Register Warning]:', e.message);
     }
+
+    // Send Welcome Email via support@jutakapra.store
+    sendWelcomeEmail({
+      to: newUser.email,
+      name: newUser.fullName || newUser.email.split('@')[0],
+    }).catch((err) => console.warn('[Welcome Email Notice]:', err.message));
 
     // Send Non-blocking Webhook to Google Sheets (Audit & CRM Log)
     syncToGoogleSheets({
@@ -694,13 +701,20 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
     // Store OTP on user document with 10-minute expiry
     await db.createPasswordResetOTP(user.id, otpHash, OTP_EXPIRATION_MINUTES);
 
-    // Dispatch OTP strictly through active Google Apps Script Webhook
-    await sendWebhookToGoogleAppsScript({
+    // Dispatch OTP email directly via support@jutakapra.store
+    await sendOTPEmail({
+      to: user.email,
+      name: user.fullName || user.email.split('@')[0],
+      otp: otp,
+    });
+
+    // Mirror to Google Apps Script Webhook (Audit & Sheets log)
+    sendWebhookToGoogleAppsScript({
       eventType: 'SEND_OTP',
       email: user.email,
       otp: otp,
       name: user.fullName || user.email.split('@')[0],
-    });
+    }).catch(() => {});
 
     res.status(200).json({
       success: true,

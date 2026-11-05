@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { OrderModel } from '../models/order.model.js';
 import { syncToGoogleSheets } from '../services/sheetsService.js';
 import { syncOrderToSupabase } from '../services/supabaseService.js';
+import { sendOrderConfirmationEmail } from '../services/emailService.js';
 import { FileDB } from '../services/fileDatabase.js';
 import mongoose from 'mongoose';
 
@@ -96,6 +97,11 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
     } catch (e: any) {
       console.warn('[Supabase Create Order Warning]:', e.message);
     }
+
+    // Send Order Confirmation Email via support@jutakapra.store (non-blocking)
+    sendOrderConfirmationEmail(savedOrder).catch((e: any) => {
+      console.warn('[Order Confirmation Email Notice]:', e.message);
+    });
 
     res.status(201).json({
       success: true,

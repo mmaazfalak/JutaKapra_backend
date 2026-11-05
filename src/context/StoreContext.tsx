@@ -218,12 +218,14 @@ interface StoreContextType {
   refreshStoresList: () => Promise<{ success: boolean; count: number; message?: string }>;
   isSupabaseStoresSynced: boolean;
   adminRole: 'super_admin' | 'store_owner';
+  setAdminRole: (role: 'super_admin' | 'store_owner') => void;
   currentStoreId: string | null;
   setCurrentStoreId: (id: string | null) => void;
   loginStoreOwner: (emailOrPhone: string, passcode?: string) => Promise<{ success: boolean; store?: StoreAccount; error?: string }>;
 
   // Admin Auth
   isAdminLoggedIn: boolean;
+  setIsAdminLoggedIn: (val: boolean) => void;
   isAdminAuthenticated: boolean;
   loginAdmin: (password: string, email?: string, is2faVerified?: boolean) => Promise<boolean>;
   logoutAdmin: () => void;
@@ -2086,6 +2088,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         country: defaultAddr?.country || 'Pakistan',
         role: fresh.role,
         status: fresh.status,
+        auth_provider: (fresh.authProvider as any) || 'email',
+        created_at: fresh.createdAt || new Date().toISOString(),
+        last_login_at: fresh.lastLoginAt || new Date().toISOString(),
       });
       setCustomers((prev) => {
         const idx = prev.findIndex((c) => c.id === fresh.id || c.email.toLowerCase() === fresh.email.toLowerCase());
@@ -3737,10 +3742,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         refreshStoresList,
         isSupabaseStoresSynced,
         adminRole,
+        setAdminRole,
         currentStoreId,
         setCurrentStoreId,
         loginStoreOwner,
         isAdminLoggedIn,
+        setIsAdminLoggedIn,
         isAdminAuthenticated: isAdminLoggedIn,
         loginAdmin,
         logoutAdmin,
