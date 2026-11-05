@@ -329,11 +329,11 @@ export const AdminOrdersView: React.FC = () => {
                         <div className={`text-[11px] ${textMuted}`}>{ord.customer.city}, {ord.customer.country}</div>
                         <div className="flex items-center space-x-2 mt-1" onClick={(e) => e.stopPropagation()}>
                           <a
-                            href={`https://wa.me/${ord.customer.phone.replace(/[^0-9]/g, '')}`}
+                            href={`https://wa.me/${ord.customer.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hello ${ord.customer.fullName}, your Juta Kapra order #${ord.orderNumber} of PKR ${(ord.total || 0).toLocaleString()} is confirmed! Please reply YES to dispatch.`)}`}
                             target="_blank"
                             rel="noreferrer"
                             className="p-1 rounded bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 text-[10px] font-bold flex items-center gap-1"
-                            title="Chat on WhatsApp"
+                            title="1-Click WhatsApp Order Confirmation"
                           >
                             <MessageCircle className="w-2.5 h-2.5" />
                             <span>WhatsApp</span>

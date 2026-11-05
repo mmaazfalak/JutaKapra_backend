@@ -1,5 +1,18 @@
 {
+  "version": 2,
+  "regions": ["sin1", "bom1"],
   "framework": "vite",
+  "headers": [
+    {
+      "source": "/api/products",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=60, s-maxage=300, stale-while-revalidate=86400"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",

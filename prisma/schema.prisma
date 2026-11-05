@@ -1,0 +1,178 @@
+// ====================================================
+// Juta Kapra — Production Prisma Schema (Supabase Postgres)
+// ====================================================
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ----------------------------------------------------
+// 1. User & Customer Authentication
+// ----------------------------------------------------
+enum UserRole {
+  CUSTOMER
+  ADMIN
+  DISPATCH_MANAGER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  phone         String    @unique // Essential for Pakistani/COD stores
+  passwordHash  String
+  fullName      String
+  role          UserRole  @default(CUSTOMER)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  addresses     Address[]
+  orders        Order[]
+
+  @@index([phone])
+  @@index([email])
+}
+
+// ----------------------------------------------------
+// 2. Customer Delivery Addresses
+// ----------------------------------------------------
+model Address {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipientName String
+  phone         String
+  city          String   // e.g. Lahore, Karachi, Islamabad
+  province      String   // e.g. Punjab, Sindh
+  streetAddress String   // House/Flat, Street, Area
+  landmark      String?  // Optional landmark for courier
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ----------------------------------------------------
+// 3. Catalog & Products
+// ----------------------------------------------------
+model Category {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  imageUrl    String?
+  sortOrder   Int       @default(0)
+  products    Product[]
+  createdAt   DateTime  @default(now())
+
+  @@index([slug])
+}
+
+model Product {
+  id             String      @id @default(cuid())
+  categoryId     String
+  category       Category    @relation(fields: [categoryId], references: [id])
+  title          String
+  slug           String      @unique
+  description    String      @db.Text
+  price          Decimal     @db.Decimal(10, 2)
+  compareAtPrice Decimal?    @db.Decimal(10, 2) // Original price for discount strikethrough
+  stockQuantity  Int         @default(0)
+  images         String[]    // Array of Supabase Storage CDN URLs
+  isFeatured     Boolean     @default(false)
+  isActive       Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  orderItems     OrderItem[]
+
+  @@index([categoryId])
+  @@index([slug])
+  @@index([isActive, isFeatured])
+}
+
+// ----------------------------------------------------
+// 4. Orders & Delivery Lifecycle
+// ----------------------------------------------------
+enum OrderStatus {
+  PENDING           // Placed by customer, awaiting store confirmation
+  CONFIRMED         // Verified (via phone/WhatsApp or automated)
+  PACKED            // Sealed and labeled in warehouse
+  OUT_FOR_DELIVERY  // Handed to courier (TCS, Trax, Leopards, Riders)
+  DELIVERED         // Customer received package
+  CANCELLED         // Cancelled by user or admin
+  RETURNED          // Returned/rejected package
+}
+
+enum PaymentMethod {
+  CASH_ON_DELIVERY
+  BANK_TRANSFER
+  ONLINE_CARD
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  REFUNDED
+}
+
+model Order {
+  id               String        @id @default(cuid())
+  orderNumber      String        @unique // e.g. "ORD-94821"
+  userId           String?       // Nullable if supporting guest checkout
+  user             User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  // Frozen snapshot of recipient details at order time (immune to later address changes)
+  customerName     String
+  customerPhone    String
+  customerEmail    String?
+  shippingCity     String
+  shippingAddress  String
+  shippingLandmark String?
+  
+  // Financials
+  subtotal         Decimal       @db.Decimal(10, 2)
+  deliveryFee      Decimal       @db.Decimal(10, 2) @default(0)
+  discountAmount   Decimal       @db.Decimal(10, 2) @default(0)
+  totalAmount      Decimal       @db.Decimal(10, 2)
+  
+  // Status & Tracking
+  orderStatus      OrderStatus   @default(PENDING)
+  paymentMethod    PaymentMethod @default(CASH_ON_DELIVERY)
+  paymentStatus    PaymentStatus @default(UNPAID)
+  
+  courierName      String?       // e.g. "Trax Logistics", "TCS", "In-House Rider"
+  trackingNumber   String?       // Courier consignment note / tracking code
+  deliveryNotes    String?       // Instructions from customer
+  
+  items            OrderItem[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([orderNumber])
+  @@index([orderStatus])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id              String   @id @default(cuid())
+  orderId         String
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id])
+  
+  productTitle    String   // Snapshot of title at time of order
+  unitPrice       Decimal  @db.Decimal(10, 2)
+  quantity        Int      @default(1)
+  totalPrice      Decimal  @db.Decimal(10, 2)
+  selectedVariant String? // e.g. "Color: Red, Size: L"
+
+  @@index([orderId])
+  @@index([productId])
+}

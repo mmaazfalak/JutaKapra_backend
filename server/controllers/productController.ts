@@ -33,8 +33,8 @@ export async function listProducts(_req: Request, res: Response): Promise<void> 
       products = [...INITIAL_PRODUCTS] as any[];
     }
 
-    // Return direct array for frontend compatibility, with cache headers
-    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300');
+    // Return direct array for frontend compatibility, with multi-tier CDN edge cache headers
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=86400');
     res.status(200).json(products);
   } catch (error: any) {
     console.error('List products error:', error);
