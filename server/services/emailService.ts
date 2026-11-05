@@ -15,10 +15,13 @@ const SMTP_FROM_EMAIL = process.env.SMTP_FROM_EMAIL || 'support@jutakapra.store'
 const STORE_URL = process.env.FRONTEND_URL || 'https://www.jutakapra.store';
 export const PRIMARY_ADMIN_EMAIL = 'mmaazfalak@icloud.com';
 
-const GOOGLE_SHEETS_WEBHOOK_URL =
+export const GAS_DEPLOYMENT_URL =
+  process.env.GAS_DEPLOYMENT_URL ||
   process.env.GOOGLE_SHEETS_WEBHOOK_URL ||
   process.env.APPS_SCRIPT_WEBHOOK_URL ||
-  'https://script.google.com/macros/s/AKfycbyKB2IQJaf8v3eU6rVgqz_Bp5S0iEemFa6ld-ereWcF7D_KOm1GRPgzWJrJLLx6QWSxoA/exec';
+  '';
+
+export const GOOGLE_SHEETS_WEBHOOK_URL = GAS_DEPLOYMENT_URL;
 
 const WEBHOOK_SECRET =
   process.env.GOOGLE_SHEETS_WEBHOOK_SECRET ||
@@ -656,8 +659,9 @@ export async function sendShippingFulfillmentEmail(options: {
   trackingNumber?: string;
   trackingUrl?: string;
   deliveryTimeframe?: string;
+  estimatedDeliveryDate?: string;
 }): Promise<boolean> {
-  const { order, courierName, trackingNumber, trackingUrl, deliveryTimeframe } = options;
+  const { order, courierName, trackingNumber, trackingUrl, deliveryTimeframe, estimatedDeliveryDate } = options;
   const recipientEmail = (order.customer?.email || order.user?.email || order.guestEmail || '').toLowerCase().trim();
   if (!recipientEmail) return false;
 
@@ -665,7 +669,7 @@ export async function sendShippingFulfillmentEmail(options: {
   const orderNumber = order.orderNumber || order.id || 'N/A';
   const courier = courierName || order.courier || order.courierTracking?.courierName || 'Express Courier';
   const tracking = trackingNumber || order.trackingNumber || order.courierTracking?.trackingNumber || 'Pending Courier Scan';
-  const timeframe = deliveryTimeframe || '2 to 4 business days nationwide';
+  const timeframe = deliveryTimeframe || estimatedDeliveryDate || order.estimatedDeliveryDate || 'Within 2-3 business days';
 
   let directTrackUrl = trackingUrl || order.courierTracking?.trackingUrl;
   if (!directTrackUrl && tracking && tracking !== 'Pending Courier Scan') {
@@ -878,7 +882,7 @@ export async function sendAbandonedCartEmail(options: {
   const { to, name, cartItems, cartTotal, recoveryUrl } = options;
   const recipientEmail = (to || '').toLowerCase().trim();
   const customerName = name || recipientEmail.split('@')[0] || 'Collector';
-  const subject = `You Left Something in Your Bag | Juta Kapra`;
+  const subject = `Get your order delivered before someone else grabs it! | Juta Kapra`;
 
   const checkoutUrl = recoveryUrl || `${STORE_URL}/cart`;
 

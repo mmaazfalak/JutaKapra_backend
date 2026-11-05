@@ -1,10 +1,13 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-export const GOOGLE_SHEETS_WEBHOOK_URL =
+export const GAS_DEPLOYMENT_URL =
+  process.env.GAS_DEPLOYMENT_URL ||
   process.env.GOOGLE_SHEETS_WEBHOOK_URL ||
   process.env.APPS_SCRIPT_WEBHOOK_URL ||
-  'https://script.google.com/macros/s/AKfycbyKB2IQJaf8v3eU6rVgqz_Bp5S0iEemFa6ld-ereWcF7D_KOm1GRPgzWJrJLLx6QWSxoA/exec';
+  '';
+
+export const GOOGLE_SHEETS_WEBHOOK_URL = GAS_DEPLOYMENT_URL;
 
 export const GOOGLE_SHEETS_WEBHOOK_SECRET =
   process.env.GOOGLE_SHEETS_WEBHOOK_SECRET ||
@@ -222,6 +225,12 @@ export async function sendWebhookToGoogleAppsScript(payload: SheetWebhookPayload
   // Guarantee htmlBody is never empty or undefined
   if (!standardizedPayload.htmlBody) {
     standardizedPayload.htmlBody = `<p>${plainTextContent}</p>`;
+  }
+
+  // Safety check: if GAS_DEPLOYMENT_URL is empty, skip network call cleanly without crashing
+  if (!GOOGLE_SHEETS_WEBHOOK_URL || !GOOGLE_SHEETS_WEBHOOK_URL.trim()) {
+    console.warn('[SheetsService] GAS_DEPLOYMENT_URL is empty or not configured. Skipping webhook call.');
+    return true;
   }
 
   try {

@@ -115,7 +115,8 @@ interface StoreContextType {
     courierName: string,
     trackingNumber: string,
     trackingUrl: string,
-    dispatchNote?: string
+    dispatchNote?: string,
+    estimatedDeliveryDate?: string
   ) => void;
   completeOrderDelivery: (orderId: string) => void;
 
@@ -2747,7 +2748,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     courierName: string,
     trackingNumber: string,
     trackingUrl: string,
-    dispatchNote?: string
+    dispatchNote?: string,
+    estimatedDeliveryDate?: string
   ) => {
     const dispatchedAt = new Date().toISOString();
     const trackingObj: CourierTracking = {
@@ -2756,6 +2758,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       trackingUrl,
       dispatchedAt,
       dispatchNote,
+      estimatedDeliveryDate,
     };
 
     let targetOrder: Order | undefined;
@@ -2768,6 +2771,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             status: 'Dispatched to Courier',
             courier: courierName,
             trackingNumber,
+            estimatedDeliveryDate: estimatedDeliveryDate || o.estimatedDeliveryDate,
             courierTracking: trackingObj,
           };
           return targetOrder;
@@ -2781,7 +2785,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       action: 'ORDER_DISPATCHED',
       transactionId: orderId,
       httpStatusCode: 200,
-      payload: JSON.stringify({ courierName, trackingNumber, trackingUrl, dispatchNote }, null, 2),
+      payload: JSON.stringify({ courierName, trackingNumber, trackingUrl, dispatchNote, estimatedDeliveryDate }, null, 2),
       adminUser: 'super_admin_maaz',
     });
 
@@ -2801,6 +2805,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         trackingNumber,
         trackingUrl,
         dispatchNote,
+        estimatedDeliveryDate,
       }),
     }).catch((err) => console.error('Sheet order dispatch error:', err.message));
 
@@ -2816,7 +2821,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const orderRef = targetOrder || orders.find((o) => o.id === orderId || o.orderNumber === orderId);
     if (orderRef) {
-      sendOrderDispatchedEmail(orderRef, courierName, trackingNumber, trackingUrl).catch((err) =>
+      sendOrderDispatchedEmail(orderRef, courierName, trackingNumber, trackingUrl, estimatedDeliveryDate).catch((err) =>
         console.error('[StoreContext] Dispatch email error:', err.message)
       );
     }

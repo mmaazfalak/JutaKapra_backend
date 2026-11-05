@@ -49,71 +49,79 @@ export async function clearCart(req: Request, res: Response): Promise<void> {
 }
 
 /**
- * 3. GET /api/cron/abandoned-carts (Automated 1 to 24 Hour Abandoned Cart Recovery Pipeline)
- * When to Send: 1 to 24 hours after a customer adds items (shoes, jackets, shirts, watches)
- * to their cart but leaves without checking out. Strict: No discount codes.
+ * 3. GET /api/cron/abandoned-carts (Automated 10-Hour Urgency Abandoned Cart Recovery Pipeline)
+ * When to Send: When items remain in a customer's cart for >= 10 hours without checking out.
+ * Subject: "Get your order delivered before someone else grabs it! | Juta Kapra"
+ * Strict Rule: No discount codes or promo vouchers.
  */
-export async function cronAbandonedCarts(req: Request, res: Response): Promise<void> {
-  try {
-    const carts = FileDB.getCarts();
-    const orders = FileDB.getOrders();
-    const now = Date.now();
-    const ONE_HOUR_MS = 60 * 60 * 1000;
-    const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
-    const force = req.query.force === 'true';
+export async function executeAbandonedCartsScan(force: boolean = false): Promise<{ count: number; recipients: string[] }> {
+  const carts = FileDB.getCarts();
+  const orders = FileDB.getOrders();
+  const now = Date.now();
+  const TEN_HOURS_MS = 10 * 60 * 60 * 1000; // Strict 10-Hour Inactivity Threshold
+  const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000;
 
-    // Emails with orders placed in the last 24h are not abandoned
-    const recentOrderEmails = new Set(
-      orders
-        .filter((o) => now - new Date(o.createdAt).getTime() <= TWENTY_FOUR_HOURS_MS)
-        .map((o) => (o.customer?.email || '').toLowerCase().trim())
-        .filter(Boolean)
-    );
+  // Emails with orders placed in the last 48h are not abandoned
+  const recentOrderEmails = new Set(
+    orders
+      .filter((o) => now - new Date(o.createdAt).getTime() <= FORTY_EIGHT_HOURS_MS)
+      .map((o) => (o.customer?.email || '').toLowerCase().trim())
+      .filter(Boolean)
+  );
 
-    const dispatched: string[] = [];
+  const dispatched: string[] = [];
 
-    for (const cart of carts) {
-      const email = (cart.email || cart.customerEmail || '').toLowerCase().trim();
-      if (!email) continue;
+  for (const cart of carts) {
+    const email = (cart.email || cart.customerEmail || '').toLowerCase().trim();
+    if (!email) continue;
 
-      // If user completed an order recently, purge cart and skip
-      if (recentOrderEmails.has(email)) {
-        FileDB.deleteCart(email);
-        continue;
-      }
+    // If user completed an order recently, purge cart and skip
+    if (recentOrderEmails.has(email)) {
+      FileDB.deleteCart(email);
+      continue;
+    }
 
-      if (cart.abandonedEmailSent && !force) continue;
+    if (cart.abandonedEmailSent && !force) continue;
 
-      const updatedAt = new Date(cart.updatedAt || cart.createdAt).getTime();
-      const diff = now - updatedAt;
+    const updatedAt = new Date(cart.updatedAt || cart.createdAt).getTime();
+    const diff = now - updatedAt;
 
-      // Check if cart is between 1 and 24 hours old (or forced in test mode)
-      const isEligible = force || (diff >= ONE_HOUR_MS && diff <= TWENTY_FOUR_HOURS_MS);
+    // Check if cart has been inactive for >= 10 hours
+    const isEligible = force || (diff >= TEN_HOURS_MS && diff <= FORTY_EIGHT_HOURS_MS);
 
-      if (isEligible && Array.isArray(cart.items) && cart.items.length > 0) {
-        try {
-          await sendAbandonedCartEmail({
-            to: email,
-            name: cart.customerName,
-            cartItems: cart.items,
-            cartTotal: cart.total,
-          });
+    if (isEligible && Array.isArray(cart.items) && cart.items.length > 0) {
+      try {
+        await sendAbandonedCartEmail({
+          to: email,
+          name: cart.customerName,
+          cartItems: cart.items,
+          cartTotal: cart.total,
+          recoveryUrl: 'https://www.jutakapra.store/cart',
+        });
 
-          cart.abandonedEmailSent = true;
-          cart.abandonedEmailSentAt = new Date().toISOString();
-          FileDB.saveCart(cart);
-          dispatched.push(email);
-        } catch (e: any) {
-          console.warn(`[Abandoned Cart Dispatch Notice for ${email}]:`, e.message);
-        }
+        cart.abandonedEmailSent = true;
+        cart.abandonedEmailSentAt = new Date().toISOString();
+        FileDB.saveCart(cart);
+        dispatched.push(email);
+      } catch (e: any) {
+        console.warn(`[10-Hour Abandoned Cart Notice for ${email}]:`, e.message);
       }
     }
+  }
+
+  return { count: dispatched.length, recipients: dispatched };
+}
+
+export async function cronAbandonedCarts(req: Request, res: Response): Promise<void> {
+  try {
+    const force = req.query.force === 'true';
+    const result = await executeAbandonedCartsScan(force);
 
     res.status(200).json({
       success: true,
-      message: `Checked abandoned carts. Dispatched recovery emails to ${dispatched.length} recipients.`,
-      dispatchedCount: dispatched.length,
-      recipients: dispatched,
+      message: `Checked 10-hour abandoned carts. Dispatched recovery emails to ${result.count} recipients.`,
+      dispatchedCount: result.count,
+      recipients: result.recipients,
     });
   } catch (error: any) {
     console.error('Cron abandoned carts error:', error);

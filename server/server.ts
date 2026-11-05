@@ -9,6 +9,7 @@ import orderRoutes from './routes/orderRoutes.js';
 import emailRoutes from './routes/emailRoutes.js';
 import cartRoutes from './routes/cartRoutes.js';
 import productRoutes from './routes/productRoutes.js';
+import { executeAbandonedCartsScan } from './controllers/cartController.js';
 
 dotenv.config();
 
@@ -73,6 +74,16 @@ app.use('/api', authRoutes);
 app.use('/api/*', (_req, res) => {
   res.status(404).json({ success: false, message: 'API Route Not Found' });
 });
+
+// Background worker: Periodic scan for carts inactive for >= 10 hours
+if (process.env.NODE_ENV !== 'test') {
+  const CART_SCAN_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+  setInterval(() => {
+    executeAbandonedCartsScan().catch((err: any) => {
+      console.warn('[Cart Abandonment Scan Notice]:', err?.message || err);
+    });
+  }, CART_SCAN_INTERVAL_MS);
+}
 
 if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL && !process.env.NO_LISTEN) {
   app.listen(PORT, () => {

@@ -22,6 +22,12 @@ export const OrderFulfillmentModal: React.FC<OrderFulfillmentModalProps> = ({ or
 
   const [courierName, setCourierName] = useState<string>('TCS Express');
   const [trackingNumber, setTrackingNumber] = useState<string>('');
+  const [estimatedDeliveryDate, setEstimatedDeliveryDate] = useState<string>(() => {
+    if (order.estimatedDeliveryDate) return order.estimatedDeliveryDate;
+    const d = new Date();
+    d.setDate(d.getDate() + 3);
+    return d.toISOString().split('T')[0];
+  });
   const [dispatchNote, setDispatchNote] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
@@ -37,7 +43,14 @@ export const OrderFulfillmentModal: React.FC<OrderFulfillmentModalProps> = ({ or
     const trackingUrl = `${baseUrl}${encodeURIComponent(trackingNumber.trim())}`;
 
     setTimeout(() => {
-      dispatchOrderToCourier(order.id, courierName, trackingNumber.trim(), trackingUrl, dispatchNote.trim());
+      dispatchOrderToCourier(
+        order.id,
+        courierName,
+        trackingNumber.trim(),
+        trackingUrl,
+        dispatchNote.trim(),
+        estimatedDeliveryDate.trim()
+      );
       setIsSubmitting(false);
       onClose();
     }, 400);
@@ -156,9 +169,26 @@ export const OrderFulfillmentModal: React.FC<OrderFulfillmentModalProps> = ({ or
             />
           </div>
 
+          {/* Mandatory Estimated Delivery Date */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block font-bold">
+                3. Estimated Delivery Date <span className="text-emerald-500">* (Included in Dispatch Email)</span>
+              </label>
+            </div>
+            <input
+              type="date"
+              required
+              min={new Date().toISOString().split('T')[0]}
+              value={estimatedDeliveryDate}
+              onChange={(e) => setEstimatedDeliveryDate(e.target.value)}
+              className={`w-full p-2.5 rounded-xl border ${inputBg} font-mono font-bold text-sm outline-none focus:border-blue-500`}
+            />
+          </div>
+
           {/* Optional Dispatch Note */}
           <div className="space-y-1.5">
-            <label className="block font-bold">3. Optional Dispatch Note for Customer</label>
+            <label className="block font-bold">4. Optional Dispatch Note for Customer</label>
             <textarea
               rows={2}
               value={dispatchNote}

@@ -80,6 +80,7 @@ export interface CourierTracking {
   trackingUrl: string;
   dispatchedAt: string;
   dispatchNote?: string;
+  estimatedDeliveryDate?: string;
 }
 
 export interface Order {
@@ -96,6 +97,7 @@ export interface Order {
   status: OrderStatus;
   courier?: string;
   trackingNumber?: string;
+  estimatedDeliveryDate?: string;
   courierTracking?: CourierTracking;
   createdAt: string;
   deliveredAt?: string;

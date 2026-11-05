@@ -13,6 +13,12 @@
       ]
     }
   ],
+  "crons": [
+    {
+      "path": "/api/cart/cron/abandoned-carts",
+      "schedule": "0 * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",

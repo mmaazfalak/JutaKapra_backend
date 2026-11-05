@@ -2,9 +2,10 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const APPS_SCRIPT_WEBHOOK_URL =
+  process.env.GAS_DEPLOYMENT_URL ||
   process.env.GOOGLE_SHEETS_WEBHOOK_URL ||
   process.env.APPS_SCRIPT_WEBHOOK_URL ||
-  'https://script.google.com/macros/s/AKfycbyKB2IQJaf8v3eU6rVgqz_Bp5S0iEemFa6ld-ereWcF7D_KOm1GRPgzWJrJLLx6QWSxoA/exec';
+  '';
 
 const APPS_SCRIPT_SHARED_SECRET =
   process.env.GOOGLE_SHEETS_WEBHOOK_SECRET ||

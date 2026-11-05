@@ -108,10 +108,12 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
       FileDB.deleteCart(savedOrder.customer.email);
     }
 
-    // Send Order Confirmation Email via support@jutakapra.store (non-blocking)
-    sendOrderConfirmationEmail(savedOrder).catch((e: any) => {
-      console.warn('[Order Confirmation Email Notice]:', e.message);
-    });
+    // Send Order Confirmation Email via support@jutakapra.store ONLY if not skipped/already sent
+    if (!req.body?.skipEmailNotification && !req.body?.emailNotificationSent) {
+      sendOrderConfirmationEmail(savedOrder).catch((e: any) => {
+        console.warn('[Order Confirmation Email Notice]:', e.message);
+      });
+    }
 
     res.status(201).json({
       success: true,
@@ -134,7 +136,7 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
 export async function updateOrderStatus(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
-    const { status, trackingNumber, courierName, courier, trackingUrl, dispatchNote } = req.body || {};
+    const { status, trackingNumber, courierName, courier, trackingUrl, dispatchNote, estimatedDeliveryDate } = req.body || {};
 
     if (!status) {
       res.status(400).json({ success: false, message: 'Status field is required.' });
@@ -151,15 +153,17 @@ export async function updateOrderStatus(req: Request, res: Response): Promise<vo
         const updateFields: Record<string, any> = { status };
         if (courierUsed) updateFields.courier = courierUsed;
         if (trackingNum) updateFields.trackingNumber = trackingNum;
+        if (estimatedDeliveryDate) updateFields.estimatedDeliveryDate = estimatedDeliveryDate;
         if (status === 'Delivered') updateFields.deliveredAt = new Date();
 
-        if (trackingNum || courierUsed || dispatchNote) {
+        if (trackingNum || courierUsed || dispatchNote || estimatedDeliveryDate) {
           updateFields.courierTracking = {
             courierName: courierUsed,
             trackingNumber: trackingNum,
             trackingUrl: trackingUrl || '',
             dispatchedAt: new Date().toISOString(),
             dispatchNote: dispatchNote || '',
+            estimatedDeliveryDate: estimatedDeliveryDate || '',
           };
         }
 
