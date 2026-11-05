@@ -16,7 +16,7 @@
   "crons": [
     {
       "path": "/api/cart/cron/abandoned-carts",
-      "schedule": "0 * * * *"
+      "schedule": "0 0 * * *"
     }
   ],
   "rewrites": [
