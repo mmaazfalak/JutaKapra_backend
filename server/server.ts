@@ -28,22 +28,23 @@ app.use(helmet({
 }));
 
 // CORS Configuration (supports credentials for secure cookies with 24h preflight cache)
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow local development, custom domain, and specified frontend url
-      if (!origin || origin === FRONTEND_URL || origin.includes('localhost') || origin.includes('127.0.0.1') || origin.endsWith('.vercel.app') || origin.includes('jutakapra.store')) {
-        callback(null, true);
-      } else {
-        callback(null, true);
-      }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-    maxAge: 86400, // Cache OPTIONS preflight for 24 hours to eliminate cross-origin preflight latency
-  })
-);
+const corsOptions = {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // Allow local development, custom domain, and specified frontend url
+    if (!origin || origin === FRONTEND_URL || origin.includes('localhost') || origin.includes('127.0.0.1') || origin.endsWith('.vercel.app') || origin.includes('jutakapra.store')) {
+      callback(null, true);
+    } else {
+      callback(null, true);
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  maxAge: 86400, // Cache OPTIONS preflight for 24 hours to eliminate cross-origin preflight latency
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 app.use(cookieParser());
 app.use(express.json());
