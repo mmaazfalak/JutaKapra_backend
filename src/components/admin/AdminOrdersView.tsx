@@ -25,6 +25,7 @@ import { useStore } from '../../context/StoreContext';
 import { Order, OrderStatus } from '../../types';
 import { formatPKR } from '../../utils/format';
 import { OrderFulfillmentModal } from '../OrderFulfillmentModal';
+import { normalizeOrderItem } from '../../utils/orderItem';
 
 export const AdminOrdersView: React.FC = () => {
   const {
@@ -560,21 +561,31 @@ export const AdminOrdersView: React.FC = () => {
             <div className="space-y-2">
               <h4 className="text-xs font-bold uppercase tracking-wider text-blue-400">Order Items</h4>
               <div className={`rounded-xl ${subCardBg} border divide-y divide-inherit`}>
-                {inspectingOrder.items.map((it, idx) => (
-                  <div key={idx} className="p-3.5 flex items-center justify-between text-xs">
-                    <div className="flex items-center space-x-3">
-                      <img src={it.product.images[0]} alt={it.product.title} className="w-10 h-10 rounded-lg object-cover bg-slate-800" />
-                      <div>
-                        <p className="font-bold text-white">{it.product.title}</p>
-                        <p className={`text-[11px] ${textMuted}`}>Size: {it.selectedSize} • Era: {it.product.era}</p>
+                {inspectingOrder.items.map((rawIt, idx) => {
+                  const it = normalizeOrderItem(rawIt);
+                  return (
+                    <div key={idx} className="p-3.5 flex items-center justify-between text-xs">
+                      <div className="flex items-center space-x-3">
+                        <img
+                          src={it.image}
+                          alt={it.title}
+                          className="w-10 h-10 rounded-lg object-cover bg-slate-800"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=600&q=80';
+                          }}
+                        />
+                        <div>
+                          <p className="font-bold text-white">{it.title}</p>
+                          <p className={`text-[11px] ${textMuted}`}>Size: {it.size} • Era: {it.era}</p>
+                        </div>
+                      </div>
+                      <div className="text-right font-mono font-bold">
+                        <span className="text-slate-400 text-[11px] mr-2">{it.quantity}x</span>
+                        <span className="text-white">{formatPKR(it.totalPrice)}</span>
                       </div>
                     </div>
-                    <div className="text-right font-mono font-bold">
-                      <span className="text-slate-400 text-[11px] mr-2">{it.quantity}x</span>
-                      <span className="text-white">{formatPKR(it.product.price * it.quantity)}</span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

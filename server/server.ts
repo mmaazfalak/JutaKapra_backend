@@ -9,6 +9,7 @@ import orderRoutes from './routes/orderRoutes.js';
 import emailRoutes from './routes/emailRoutes.js';
 import cartRoutes from './routes/cartRoutes.js';
 import productRoutes from './routes/productRoutes.js';
+import paymentRoutes from './routes/paymentRoutes.js';
 import { executeAbandonedCartsScan } from './controllers/cartController.js';
 
 dotenv.config();
@@ -65,6 +66,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/payments', paymentRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/email', emailRoutes);
 app.use('/api/cron', emailRoutes);

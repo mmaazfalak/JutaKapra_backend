@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
-import { SupabaseProfile, Customer, StoreAccount, SupabaseStore } from '../types';
+import { SupabaseProfile, Customer, StoreAccount, SupabaseStore, Product, PaymentGatewayConfig } from '../types';
 
 const supabaseUrl =
   import.meta.env.VITE_SUPABASE_URL ||
@@ -37,6 +37,39 @@ export const supabase: SupabaseClient = createClient(
     },
   }
 );
+
+export const VALID_PROFILE_COLUMNS = new Set([
+  'id',
+  'full_name',
+  'email',
+  'avatar_url',
+  'phone',
+  'auth_provider',
+  'role',
+  'status',
+  'default_shipping_address',
+  'city',
+  'state',
+  'postal_code',
+  'country',
+  'created_at',
+  'last_login_at',
+]);
+
+/**
+ * Filter out any non-existent columns before upserting into public.profiles
+ */
+export const sanitizeProfilePayload = (data: Record<string, any>): Record<string, any> => {
+  const sanitized: Record<string, any> = {};
+  for (const [key, val] of Object.entries(data)) {
+    if ((key === 'address' || key === 'defaultShippingAddress') && !sanitized.default_shipping_address && val) {
+      sanitized.default_shipping_address = val;
+    } else if (VALID_PROFILE_COLUMNS.has(key) && val !== undefined) {
+      sanitized[key] = val;
+    }
+  }
+  return sanitized;
+};
 
 // Helper to convert Supabase User & Profile into application Customer object with address persistence
 export const profileToCustomer = (profile: SupabaseProfile, fallbackUser?: SupabaseUser | null): Customer => {
@@ -176,7 +209,7 @@ export const syncSupabaseUserProfile = async (
 
   const finalPhone = existingProfile?.phone || newPhone || '';
 
-  const profilePayload: Partial<SupabaseProfile> & { id: string; email: string } = {
+  const rawPayload: Record<string, any> = {
     id: user.id,
     email: (user.email || '').toLowerCase().trim(),
     full_name: finalFullName,
@@ -185,8 +218,7 @@ export const syncSupabaseUserProfile = async (
     auth_provider: provider === 'google' ? 'google' : (existingProfile?.auth_provider || 'email'),
     role: (user.email?.toLowerCase() === 'mmaazfalak@icloud.com') ? 'admin' : (existingProfile?.role || customData?.role || 'customer'),
     status: existingProfile?.status || 'active',
-    address: customData?.address || customData?.defaultShippingAddress || existingProfile?.address || existingProfile?.default_shipping_address,
-    default_shipping_address: customData?.defaultShippingAddress || customData?.address || existingProfile?.default_shipping_address || existingProfile?.address,
+    default_shipping_address: customData?.defaultShippingAddress || customData?.address || existingProfile?.default_shipping_address,
     city: customData?.city || existingProfile?.city,
     state: customData?.state || existingProfile?.state,
     postal_code: customData?.postalCode || existingProfile?.postal_code,
@@ -194,12 +226,14 @@ export const syncSupabaseUserProfile = async (
     last_login_at: new Date().toISOString(),
   };
 
+  const profilePayload = sanitizeProfilePayload(rawPayload);
+
   try {
     const { data, error } = await supabase
       .from('profiles')
       .upsert(profilePayload, { onConflict: 'id' })
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.warn('Failed to upsert Supabase profile:', error.message);
@@ -222,17 +256,18 @@ export const updateSupabaseUserProfile = async (
   if (!isSupabaseConfigured()) return { success: true };
 
   try {
-    const payload: any = {
+    const rawPayload: Record<string, any> = {
       ...updates,
       id: userId,
       last_login_at: new Date().toISOString(),
     };
+    const payload = sanitizeProfilePayload(rawPayload);
 
     const { data, error } = await supabase
       .from('profiles')
       .upsert(payload, { onConflict: 'id' })
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) {
       return { success: false, error: error.message };
@@ -254,29 +289,26 @@ export const setSupabaseUserPassword = async (
   if (!isSupabaseConfigured()) return { success: true };
 
   try {
-    const { error } = await supabase.auth.updateUser({ password });
-    if (error) {
-      console.warn('Supabase auth.updateUser note:', error.message);
+    // Only attempt Supabase auth client update if an active browser auth session exists
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (sessionData?.session) {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) {
+        console.warn('Supabase auth.updateUser note:', error.message);
+      }
     }
 
     if (userId) {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
-      if (isUuid) {
-        await supabase
-          .from('profiles')
-          .update({
-            has_password: true,
-            password_hash: 'active',
-            last_login_at: new Date().toISOString(),
-          })
-          .eq('id', userId);
-      }
+      await supabase
+        .from('profiles')
+        .update({
+          last_login_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
     } else if (email) {
       await supabase
         .from('profiles')
         .update({
-          has_password: true,
-          password_hash: 'active',
           last_login_at: new Date().toISOString(),
         })
         .eq('email', email.toLowerCase().trim());
@@ -596,5 +628,271 @@ export const seedInitialStoresToSupabase = async (initialStores: StoreAccount[])
     await supabase.from('stores').upsert(payloads, { onConflict: 'id' });
   } catch (err) {
     console.warn('Supabase seed initial stores note:', err);
+  }
+};
+
+// ==============================================================================
+// PRODUCTS DATABASE ADAPTER (Supabase <-> Application)
+// ==============================================================================
+
+export const supabaseProductToFrontend = (row: any): Product => {
+  return {
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    category: row.category,
+    subcategory: row.subcategory || undefined,
+    era: row.era || '1990s',
+    price: Number(row.price) || 0,
+    originalPrice: row.original_price ? Number(row.original_price) : undefined,
+    conditionGrade: row.condition_grade || 'Vintage 9/10',
+    conditionTier: row.condition_tier || 'Good',
+    size: row.size || 'One Size',
+    measurements: typeof row.measurements === 'string' ? JSON.parse(row.measurements) : (row.measurements || {}),
+    description: row.description || '',
+    details: Array.isArray(row.details) ? row.details : (typeof row.details === 'string' ? JSON.parse(row.details) : []),
+    images: Array.isArray(row.images) ? row.images : (typeof row.images === 'string' ? JSON.parse(row.images) : []),
+    inStock: Boolean(row.in_stock),
+    is1of1: Boolean(row.is_1of1),
+    inventoryType: row.inventory_type || (row.is_1of1 ? 'thrift_1of1' : 'multi_stock'),
+    stockCount: typeof row.stock_count === 'number' ? row.stock_count : (row.in_stock ? 1 : 0),
+    storeId: row.store_id || 'store-f7-archive',
+    storeName: row.store_name || 'F-7 Flagship Archive',
+    isHidden: Boolean(row.is_hidden),
+    isReserved: Boolean(row.is_reserved),
+    isArchived: Boolean(row.is_archived),
+    isHotDeal: Boolean(row.is_hot_deal),
+    isTrending: Boolean(row.is_trending),
+    tags: Array.isArray(row.tags) ? row.tags : (typeof row.tags === 'string' ? JSON.parse(row.tags) : []),
+    dropBatch: row.drop_batch || undefined,
+    dateAdded: row.date_added || new Date().toISOString(),
+  };
+};
+
+export const frontendProductToSupabase = (p: Product): Record<string, any> => {
+  return {
+    id: p.id,
+    slug: p.slug,
+    title: p.title,
+    category: p.category,
+    subcategory: p.subcategory || null,
+    era: p.era || '1990s',
+    price: p.price,
+    original_price: p.originalPrice || null,
+    condition_grade: p.conditionGrade || 'Vintage 9/10',
+    condition_tier: p.conditionTier || 'Good',
+    size: p.size || 'One Size',
+    measurements: p.measurements || {},
+    description: p.description || '',
+    details: p.details || [],
+    images: p.images || [],
+    in_stock: p.inStock,
+    is_1of1: p.is1of1,
+    inventory_type: p.inventoryType || 'thrift_1of1',
+    stock_count: typeof p.stockCount === 'number' ? p.stockCount : 1,
+    store_id: p.storeId || 'store-f7-archive',
+    store_name: p.storeName || 'F-7 Flagship Archive',
+    is_hidden: Boolean(p.isHidden),
+    is_reserved: Boolean(p.isReserved),
+    is_archived: Boolean(p.isArchived),
+    is_hot_deal: Boolean(p.isHotDeal),
+    is_trending: Boolean(p.isTrending),
+    tags: p.tags || [],
+    drop_batch: p.dropBatch || null,
+    date_added: p.dateAdded || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+};
+
+export const fetchSupabaseProducts = async (): Promise<{ success: boolean; data: Product[]; error?: string }> => {
+  if (!isSupabaseConfigured()) return { success: false, data: [] };
+
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('date_added', { ascending: false });
+
+    if (error) {
+      return { success: false, data: [], error: error.message };
+    }
+
+    if (Array.isArray(data)) {
+      return { success: true, data: data.map(supabaseProductToFrontend) };
+    }
+
+    return { success: true, data: [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message || 'Failed to fetch products' };
+  }
+};
+
+export const syncSupabaseProduct = async (product: Product): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured()) return { success: true };
+
+  try {
+    const payload = frontendProductToSupabase(product);
+    const { error } = await supabase
+      .from('products')
+      .upsert(payload, { onConflict: 'id' });
+
+    if (error) {
+      console.warn('[Supabase] sync product error:', error.message);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to sync product' };
+  }
+};
+
+export const deleteSupabaseProduct = async (id: string): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured()) return { success: true };
+
+  try {
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to delete product' };
+  }
+};
+
+export const seedInitialProductsToSupabase = async (initialProducts: Product[]): Promise<void> => {
+  if (!isSupabaseConfigured() || !Array.isArray(initialProducts) || initialProducts.length === 0) return;
+
+  try {
+    const payloads = initialProducts.map(frontendProductToSupabase);
+    await supabase.from('products').upsert(payloads, { onConflict: 'id' });
+  } catch (err) {
+    console.warn('Supabase seed initial products note:', err);
+  }
+};
+
+// ==============================================================================
+// PAYMENT GATEWAYS DATABASE ADAPTER (Supabase <-> Application)
+// ==============================================================================
+
+export const supabaseGatewayToFrontend = (row: any): PaymentGatewayConfig => {
+  return {
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    providerName: row.provider_name || row.providerName,
+    isEnabled: Boolean(row.is_enabled !== undefined ? row.is_enabled : row.isEnabled),
+    environment: row.environment || 'live',
+    accountTitle: row.account_title || row.accountTitle,
+    accountNumber: row.account_number || row.accountNumber,
+    iban: row.iban,
+    swiftCode: row.swift_code || row.swiftCode,
+    bankName: row.bank_name || row.bankName,
+    minOrderLimit: row.min_order_limit !== null ? Number(row.min_order_limit) : undefined,
+    maxOrderLimit: row.max_order_limit !== null ? Number(row.max_order_limit) : undefined,
+    disclaimerNote: row.disclaimer_note || row.disclaimerNote,
+    customInstructions: row.custom_instructions || row.customInstructions,
+    autoConfirmCOD: Boolean(row.auto_confirm_cod || row.autoConfirmCOD),
+    publishableKey: row.publishable_key || row.publishableKey,
+    encryptedSecretKey: row.encrypted_secret_key || row.encryptedSecretKey,
+    webhookSecret: row.webhook_secret || row.webhookSecret,
+    webhookEndpoint: row.webhook_endpoint || row.webhookEndpoint,
+    updatedAt: row.updated_at || row.updatedAt || new Date().toISOString(),
+  };
+};
+
+export const frontendGatewayToSupabase = (gw: PaymentGatewayConfig): Record<string, any> => {
+  return {
+    id: gw.id,
+    type: gw.type,
+    title: gw.title,
+    provider_name: gw.providerName,
+    is_enabled: Boolean(gw.isEnabled),
+    environment: gw.environment || 'live',
+    account_title: gw.accountTitle || null,
+    account_number: gw.accountNumber || null,
+    iban: gw.iban || null,
+    swift_code: gw.swiftCode || null,
+    bank_name: gw.bankName || null,
+    min_order_limit: gw.minOrderLimit || null,
+    max_order_limit: gw.maxOrderLimit || null,
+    disclaimer_note: gw.disclaimerNote || null,
+    custom_instructions: gw.customInstructions || null,
+    auto_confirm_cod: Boolean(gw.autoConfirmCOD),
+    publishable_key: gw.publishableKey || null,
+    encrypted_secret_key: gw.encryptedSecretKey || null,
+    webhook_secret: gw.webhookSecret || null,
+    webhook_endpoint: gw.webhookEndpoint || null,
+    updated_at: new Date().toISOString(),
+  };
+};
+
+export const fetchSupabasePaymentGateways = async (): Promise<{ success: boolean; data: PaymentGatewayConfig[]; error?: string }> => {
+  if (!isSupabaseConfigured()) return { success: false, data: [] };
+
+  try {
+    const { data, error } = await supabase
+      .from('payment_gateways')
+      .select('*');
+
+    if (error) {
+      return { success: false, data: [], error: error.message };
+    }
+
+    if (Array.isArray(data)) {
+      return { success: true, data: data.map(supabaseGatewayToFrontend) };
+    }
+
+    return { success: true, data: [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message || 'Failed to fetch payment gateways' };
+  }
+};
+
+export const syncSupabasePaymentGateway = async (gw: PaymentGatewayConfig): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured()) return { success: true };
+
+  try {
+    const payload = frontendGatewayToSupabase(gw);
+    const { error } = await supabase
+      .from('payment_gateways')
+      .upsert(payload, { onConflict: 'id' });
+
+    if (error) {
+      console.warn('[Supabase] sync payment gateway error:', error.message);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to sync payment gateway' };
+  }
+};
+
+export const deleteSupabasePaymentGateway = async (id: string): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured()) return { success: true };
+
+  try {
+    const { error } = await supabase
+      .from('payment_gateways')
+      .delete()
+      .eq('id', id);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to delete payment gateway' };
+  }
+};
+
+export const seedInitialGatewaysToSupabase = async (initialGateways: PaymentGatewayConfig[]): Promise<void> => {
+  if (!isSupabaseConfigured() || !Array.isArray(initialGateways) || initialGateways.length === 0) return;
+
+  try {
+    const payloads = initialGateways.map(frontendGatewayToSupabase);
+    await supabase.from('payment_gateways').upsert(payloads, { onConflict: 'id' });
+  } catch (err) {
+    console.warn('Supabase seed initial gateways note:', err);
   }
 };

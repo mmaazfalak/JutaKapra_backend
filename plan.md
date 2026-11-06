@@ -1,224 +1,208 @@
-# Development Plan & Technical Specification
+# Architecture Plan & Technical Specification
 
 **Project**: Juta Kapra E-Commerce Platform  
-**Storefront URL**: [https://www.jutakapra.store](https://www.jutakapra.store)  
+**Storefront**: [https://www.jutakapra.store](https://www.jutakapra.store)  
 **Backend API**: [https://jutakaprabackend.vercel.app](https://jutakaprabackend.vercel.app)  
+**Primary Database**: Supabase (`https://kbdrlhiishmetsddlstq.supabase.co`)  
 **Date**: November 2026  
 
 ---
 
 ## 1. Executive Summary
 
-This plan outlines the architecture, implementation steps, and verification strategies for two critical user-facing enhancements:
-1. **Transitioning the Shopping Bag / Cart from a slide-out drawer to a dedicated page view** that keeps the top navigation header and bottom mobile navigation dock visible and interactive at all times.
-2. **Hardening the Google Authentication & Account Password Lifecycle**, ensuring that once a Google-authenticated user sets a password, the system permanently requires an **"Update Password"** flow (strictly validating their current password) rather than permitting new password creation or looping back to setup mode.
+This plan addresses four core objectives specified for the platform architecture:
+1. **Dynamic Products Migration to Supabase**: Shift product records, full archival descriptions, images, pricing, condition grades, and inventory out of static code into Supabase `public.products`.
+2. **Dynamic Payment Gateways in Supabase**: Shift all payment methods (COD, EasyPaisa, JazzCash, Meezan Bank, Stripe) from static frontend arrays into Supabase `public.payment_gateways`.
+3. **TomPay Gateway Integration (`gw-tompay`)**: Register TomPay as a dynamic payment gateway managed in Supabase and available on checkout using credentials (`TOMPAY_API_KEY`, `TOMPAY_API_SECRET`).
+4. **Order Item Discrepancy Correction**: Fix the bug where ordered products fail to appear on completed order records, receipts, and customer order tracking views by implementing safe payload normalization and defensive rendering.
 
 ---
 
-## 2. Feature 1: Dedicated Shopping Bag Page (`CartView`)
+## 2. Problem Diagnosis & Root Causes
 
-### 2.1 Problem Statement
-Currently, tapping the bag button opens `CartDrawer.tsx`, an overlay drawer sliding from the right (`x: '100%'` to `x: 0`) with a dark backdrop (`fixed inset-0 z-50 bg-black/60`). This hides both the top `<Header />` and the bottom mobile dock `<MobileAppNavBar />`, creating a disjointed user journey where the user cannot smoothly navigate back to other tabs.
+### 2.1 Static Code Storage vs Dynamic Database
+- **Products**: Stored in `src/data/mockData.ts` as `INITIAL_PRODUCTS`. Adding or modifying product descriptions requires code edits, rebuilds, and Vercel deployments.
+- **Payment Methods**: Stored in `StoreContext.tsx` as `INITIAL_GATEWAYS` and cached in `localStorage` under `forge_gateways_v2`. Gateways cannot be toggled or configured remotely without local browser storage modifications.
 
-### 2.2 Objective & Requirements
-- **No right-sliding overlay drawer**: Deprecate and remove `<CartDrawer />` from the main rendering loop in `App.tsx`.
-- **Full Dedicated View**: Clicking the Bag icon navigates directly to `currentView === 'cart'` which renders `CartView.tsx`.
-- **Top Navigation Preserved**: The sticky desktop and mobile `<Header />` remains fully visible with brand logo, search, and profile actions.
-- **Bottom Navigation Preserved**: The mobile navigation dock `<MobileAppNavBar />` remains anchored at the bottom with the Shopping Bag tab highlighted via the active red indicator.
-- **Consistent Desktop Behavior**: `FloatingCartButton.tsx` and desktop cart actions navigate directly to `/cart` and hide or adjust when already on `/cart`.
-- **Add-to-Cart Flow**: Adding an item to the cart will navigate to `/cart` or display a compact confirmation toast without opening any full-screen sliding backdrop.
-
-### 2.3 Implementation Details
-1. **[`MobileAppNavBar.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/components/MobileAppNavBar.tsx)**:
-   - Define `isCartActive = currentView === 'cart'`.
-   - Update Bag button `onClick` from `setIsCartOpen(true)` to `navigateTo('cart')`.
-   - Apply active styles (`text-white`, `stroke-[2.5px]`, red hairline layout indicator) when `isCartActive` is true.
-2. **[`FloatingCartButton.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/components/FloatingCartButton.tsx)**:
-   - Update `onClick` from `setIsCartOpen(true)` to `navigateTo('cart')`.
-   - Hide the button when `currentView === 'cart'`.
-3. **[`StoreContext.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/context/StoreContext.tsx)**:
-   - In `addToCart`, replace `setIsCartOpen(true)` with `navigateTo('cart')` (or non-intrusive toast feedback).
-4. **[`App.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/App.tsx)**:
-   - Remove `{isCartOpen && <CartDrawer />}` so no slide drawer is rendered.
+### 2.2 Order Item Missing Product Display Bug
+- In [`CustomerOrdersView.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/views/CustomerOrdersView.tsx#L545-L568) and [`AccountView.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/views/AccountView.tsx#L875-L896), item rendering strictly expects `it.product.images[0]` and `it.product.title`.
+- If an order is synced via Supabase `public.orders` or backend REST `/api/orders` where items are flattened (`name`, `price`, `quantity`, `image`), `it.product` is undefined, causing React render crashes or unhandled exceptions that fail to render items.
+- In [`CustomerOrdersView.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/views/CustomerOrdersView.tsx#L52-L68), privacy filtering filters out orders if `customerId` does not strictly match `profile.id` or `currentCustomer.id`, causing placed orders to disappear from the customer view upon page reload.
 
 ---
 
-## 3. Feature 2: Google Auth & Password Lifecycle
+## 3. Database Schema Specification
 
-### 3.1 Problem Statement
-When a user logs in with Google OAuth:
-1. They are prompted in account settings to "Set Account Password" so they can also log in with email and password on other devices.
-2. However, after setting their password, `db.upsertGoogleUser` in MongoDB omitted `passwordHash` in the returned object, causing subsequent logins to report `hasPassword: false`.
-3. In `AccountView.tsx`, the current password input was conditionally hidden specifically for Google users: `(currentCustomer.passwordHash && currentCustomer.authProvider !== 'google')`. Consequently, Google users were never prompted for their current password and were stuck in a re-create loop.
-4. In `authController.ts`, the password verification check did not strictly require `currentPassword` if a password hash already existed on the record.
+### 3.1 Supabase Table: `public.products`
+```sql
+CREATE TABLE IF NOT EXISTS public.products (
+  id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  category TEXT NOT NULL,
+  subcategory TEXT,
+  era TEXT NOT NULL DEFAULT '1990s',
+  price NUMERIC(10,2) NOT NULL DEFAULT 0,
+  original_price NUMERIC(10,2),
+  condition_grade TEXT NOT NULL DEFAULT 'Vintage 9/10',
+  condition_tier TEXT NOT NULL DEFAULT 'Good',
+  size TEXT NOT NULL DEFAULT 'One Size',
+  measurements JSONB DEFAULT '{}'::jsonb,
+  description TEXT NOT NULL DEFAULT '',
+  details JSONB DEFAULT '[]'::jsonb,
+  images JSONB DEFAULT '[]'::jsonb,
+  in_stock BOOLEAN NOT NULL DEFAULT TRUE,
+  is_1of1 BOOLEAN NOT NULL DEFAULT TRUE,
+  inventory_type TEXT DEFAULT 'thrift_1of1',
+  stock_count INT DEFAULT 1,
+  store_id TEXT DEFAULT 'store-f7-archive',
+  store_name TEXT DEFAULT 'F-7 Flagship Archive',
+  is_hidden BOOLEAN NOT NULL DEFAULT FALSE,
+  is_reserved BOOLEAN NOT NULL DEFAULT FALSE,
+  is_archived BOOLEAN NOT NULL DEFAULT FALSE,
+  is_hot_deal BOOLEAN NOT NULL DEFAULT FALSE,
+  is_trending BOOLEAN NOT NULL DEFAULT FALSE,
+  tags JSONB DEFAULT '[]'::jsonb,
+  drop_batch TEXT,
+  date_added TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
-### 3.2 Target Authentication Flows & Scenarios
+-- Indexes & RLS
+CREATE INDEX IF NOT EXISTS idx_products_slug ON public.products(slug);
+CREATE INDEX IF NOT EXISTS idx_products_category ON public.products(category);
+CREATE INDEX IF NOT EXISTS idx_products_in_stock ON public.products(in_stock);
 
-| Scenario # | User Flow | System Behavior & Validation |
-|---|---|---|
-| **Flow 1** | **Standard Email Signup** | User enters Name, Email, Password -> Account created with bcrypt hash -> `hasPassword: true`. |
-| **Flow 2** | **First-Time Google Sign-In** | User logs in with Google -> Account created with `authProvider: 'google'` and `hasPassword: false`. Account settings display **"Set Account Password"** (fields: New Password, Confirm Password). |
-| **Flow 3** | **Google User Sets Password** | User submits New Password -> API hashes password, persists to MongoDB and Supabase Auth, updates `hasPassword: true`, and returns new session token. UI immediately switches to **"Update Password"**. |
-| **Flow 4** | **Google User Updates Existing Password** | User visits Settings -> System detects `hasExistingPassword === true`. Form displays **"Update Password"** (fields: Current Password, New Password, Confirm Password). Submitting verifies `currentPassword` against bcrypt hash; fails with HTTP 400 if incorrect or missing. |
-| **Flow 5** | **Returning Google Sign-In (Password Already Set)** | User logs in via Google button -> `upsertGoogleUser` preserves existing `passwordHash`. Profile payload returns `hasPassword: true`. Settings view displays "Update Password" flow requiring current password. |
-| **Flow 6** | **Dual Sign-In Capability** | User with a Google-linked account who has set a password can log in either via Google One-Tap OR via email + password on any browser/device. |
-| **Flow 7** | **Password Reset / Forgot Password** | User requests password reset -> OTP sent to email via Google Apps Script Webhook -> User verifies OTP and sets new password -> Account password updated. |
-| **Flow 8** | **Session Logout & Security Cleanup** | User clicks Logout -> Backend clears HTTP-only session cookie -> Client clears Supabase auth tokens, customer localStorage session, and resets active state. |
-
-### 3.3 Implementation Details
-1. **Backend [`server/controllers/authController.ts`](file:///Users/mmaazfalak/antigravity/JutaKapra_backend/server/controllers/authController.ts)**:
-   - In `changePassword`, if `user.passwordHash` exists, strictly enforce:
-     ```typescript
-     if (!currentPassword) {
-       res.status(400).json({ success: false, message: 'Current password is required to update your existing password.' });
-       return;
-     }
-     const isMatch = await verifyPassword(currentPassword, user.passwordHash);
-     if (!isMatch) {
-       res.status(400).json({ success: false, message: 'Current password is incorrect.' });
-       return;
-     }
-     ```
-2. **Backend [`server/db.ts`](file:///Users/mmaazfalak/antigravity/JutaKapra_backend/server/db.ts)**:
-   - In `upsertGoogleUser`, ensure the returned `UserRecord` explicitly includes:
-     ```typescript
-     passwordHash: userDoc.passwordHash || (userDoc as any).password || '',
-     password: userDoc.password || userDoc.passwordHash || '',
-     ```
-   - In the in-memory and FileDB fallback paths, retain existing `passwordHash` and `password` properties.
-3. **Frontend [`AccountView.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/views/AccountView.tsx)**:
-   - Compute `hasExistingPassword` across all session indicators:
-     ```typescript
-     const hasExistingPassword = Boolean(
-       currentCustomer.hasPassword ||
-       currentCustomer.passwordHash ||
-       profile?.has_password ||
-       (profile as any)?.password_hash ||
-       (typeof window !== 'undefined' && activeEmail && localStorage.getItem('has_password_' + activeEmail.toLowerCase()) === 'true')
-     );
-     ```
-   - Dynamically render form header: `{hasExistingPassword ? 'Update Password' : 'Set Account Password'}`.
-   - Conditionally render `Current Password` input whenever `hasExistingPassword` is true (for all accounts, including Google).
-   - Require `currentPassword` in submission handler when `hasExistingPassword` is true.
-   - On successful update/creation, set `hasPassword = true` and update `localStorage.setItem('has_password_' + email, 'true')`.
-4. **Frontend [`StoreContext.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/context/StoreContext.tsx)**:
-   - In `loginWithGoogleCredential`, pass `hasPassword` and `passwordHash` from `verifiedUser` to `loginWithGoogle`.
-   - In `loginWithGoogle`, retain `hasExistingPassword` on the constructed customer record.
-
----
-
-## 4. Feature 3: Complete Email Lifecycle, Backend & Admin Panel Overhaul
-
-### 4.1 Problem Statement
-Previously, the store triggered duplicate or triplicate confirmation emails for each order due to concurrent frontend calls to Google Apps Script and backend webhook/SMTP triggers. Additionally, the admin interface lacked controls to confirm pending orders and specify an estimated delivery date on dispatch, and there was no background recovery for abandoned carts.
-
-### 4.2 Objective & Architecture
-1. **Google Apps Script Backend (`Code.gs`)**:
-   - Single dispatcher `doPost(e)` accepting explicit actions: `send_order_placed`, `send_order_confirmed`, `send_order_dispatched`, `send_cart_abandoned`, and `send_otp`.
-   - Concurrency lock (`LockService`) and 120-second deduplication cache (`CacheService`) to completely prevent duplicate sends.
-2. **Frontend Safety & URL Placeholder**:
-   - `GAS_DEPLOYMENT_URL` reset to empty string placeholder `""`.
-   - Safe execution guard skipping fetch with a warning when URL is empty, avoiding runtime crashes.
-3. **Double-Submission Lock on Checkout**:
-   - Synchronous `submissionLockRef` debounce preventing dual button taps and concurrent order generation.
-   - Client sends `skipEmailNotification: true` to `/api/orders` to eliminate backend duplicate confirmation emails.
-4. **Admin Dashboard Controls (`AdminOrdersView.tsx` & `OrderFulfillmentModal.tsx`)**:
-   - **Confirm Order Button**: Visible on pending orders; triggers status update to `Confirmed` and sends confirmation email.
-   - **Dispatch & Delivery Date Input**: Date picker on confirmed orders capturing `estimatedDeliveryDate`, dispatched via courier modal and embedded in customer notification email.
-5. **10-Hour Cart Abandonment Logic**:
-   - Scans FileDB/MongoDB for carts inactive for $\ge 10$ hours without prior notification.
-   - Background interval (30 min) in Node server + Vercel hourly cron route (`/api/cart/cron/abandoned-carts`).
-   - Subject: *"Get your order delivered before someone else grabs it! | Juta Kapra"*, with direct checkout link and strict prohibition against discount codes.
-
----
-
-## 5. Feature 4: TomPay Payment Gateway Integration
-
-### 5.1 Overview & Objective
-Integrate **TomPay** as a direct digital card/wallet payment gateway for [Juta Kapra](https://www.jutakapra.store) enabling customers to pay online via Visa, Mastercard, and digital wallets, with instant webhook verification, automated order confirmation, and zero client-side credential exposure.
-
-### 5.2 Key Credentials & Environment Configuration
-> [!IMPORTANT]
-> Live API credentials must reside strictly on the server in `.env` and are never committed to version control or pushed to GitHub:
-> - `TOMPAY_API_KEY=tp_live_********************************`
-> - `TOMPAY_API_SECRET=tp_secret_********************************`
-> - `TOMPAY_API_BASE_URL=https://api.tompayment.com/v1` (or official merchant endpoint)
-> - `TOMPAY_WEBHOOK_SECRET=tp_secret_********************************`
-
-### 5.3 Backend Architecture (`JutaKapra_backend`)
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Customer as Customer (Browser)
-    participant Front as Frontend (CheckoutView)
-    participant API as Backend API (/api/payments/tompay)
-    participant TomPay as TomPay Gateway Server
-    participant Email as Email Service (support@jutakapra.store)
-
-    Customer->>Front: Selects "TomPay" & clicks "Complete Order"
-    Front->>API: POST /api/payments/tompay/create-checkout (order details)
-    API->>TomPay: POST /checkouts (Authorization: Bearer tp_secret_...)
-    TomPay-->>API: Returns { checkoutUrl, paymentId }
-    API-->>Front: Returns { success: true, redirectUrl }
-    Front->>TomPay: Redirects customer to secure TomPay Hosted Checkout
-    Customer->>TomPay: Submits Card / Wallet Payment
-    TomPay->>API: POST /api/payments/tompay/webhook (payment.succeeded)
-    API->>API: Validates webhook signature & updates Order status to "Confirmed"
-    API->>Email: Dispatches Order Confirmed Email from support@jutakapra.store
-    TomPay-->>Customer: Redirects back to jutakapra.store/orders?orderId=...
-    Customer->>Front: Views confirmed archival receipt
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public read products" ON public.products;
+CREATE POLICY "Public read products" ON public.products FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public or service manage products" ON public.products;
+CREATE POLICY "Public or service manage products" ON public.products FOR ALL USING (true) WITH CHECK (true);
 ```
 
-#### Endpoints:
-1. **`POST /api/payments/tompay/create-checkout`**:
-   - Payload: `{ orderId, amount, currency: 'PKR', customer: { name, email, phone }, returnUrl, cancelUrl }`.
-   - Action: Prepares authenticated request to TomPay API using `tp_secret_...`, returns hosted checkout link.
-2. **`POST /api/payments/tompay/webhook`**:
-   - Action: Validates HMAC/SHA-256 signature against `TOMPAY_API_SECRET`.
-   - Event Handling:
-     - `payment.succeeded`: Sets order status to `Confirmed`, records `transactionId`, and sends confirmation email from `support@jutakapra.store`.
-     - `payment.failed`: Records failure reason, keeps order open for retry.
-3. **`GET /api/payments/tompay/verify/:orderId`**:
-   - Client polling / redirect verification endpoint ensuring order status sync if webhook is delayed.
+### 3.2 Supabase Table: `public.payment_gateways`
+```sql
+CREATE TABLE IF NOT EXISTS public.payment_gateways (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  provider_name TEXT NOT NULL,
+  is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  environment TEXT DEFAULT 'live',
+  account_title TEXT,
+  account_number TEXT,
+  iban TEXT,
+  swift_code TEXT,
+  bank_name TEXT,
+  min_order_limit NUMERIC(10,2),
+  max_order_limit NUMERIC(10,2),
+  disclaimer_note TEXT,
+  custom_instructions TEXT,
+  auto_confirm_cod BOOLEAN DEFAULT FALSE,
+  publishable_key TEXT,
+  encrypted_secret_key TEXT,
+  webhook_secret TEXT,
+  webhook_endpoint TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
-### 5.4 Frontend Architecture (`Jutakapra_Frontend`)
+ALTER TABLE public.payment_gateways ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public read payment gateways" ON public.payment_gateways;
+CREATE POLICY "Public read payment gateways" ON public.payment_gateways FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public or service manage payment gateways" ON public.payment_gateways;
+CREATE POLICY "Public or service manage payment gateways" ON public.payment_gateways FOR ALL USING (true) WITH CHECK (true);
+```
 
-1. **Gateway Registration ([`StoreContext.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/context/StoreContext.tsx))**:
-   - Add `gw-tompay` to `INITIAL_GATEWAYS`:
-     ```typescript
-     {
-       id: 'gw-tompay',
-       type: 'card',
-       title: 'TomPay (Credit / Debit Card & Wallets)',
-       providerName: 'TomPay Secure Gateway',
-       isEnabled: true,
-       disclaimerNote: 'Instant online authorization via 256-bit encrypted TomPay gateway.',
-       updatedAt: new Date().toISOString(),
-     }
-     ```
-2. **Checkout Submission Flow ([`CheckoutView.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/views/CheckoutView.tsx))**:
-   - When customer selects `gw-tompay` and submits order:
-     - Creates order locally and in database in `Pending Payment` state.
-     - Calls `/api/payments/tompay/create-checkout`.
-     - Window seamlessly redirects to `checkoutUrl`.
-3. **Receipt & Return Handler ([`CustomerOrdersView.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/views/CustomerOrdersView.tsx))**:
-   - Handles return query parameters `?tompay_status=success&orderId=...`.
-   - Displays real-time confirmation badge and clears active cart.
-
-### 5.5 Admin Dashboard Controls ([`AdminDashboardView.tsx`](file:///Users/mmaazfalak/antigravity/JutaKapra_backend/src/views/AdminDashboardView.tsx))
-- **Gateway Toggle**: Enable or disable TomPay live without redeploying.
-- **Transaction Logs**: View TomPay reference IDs, card brand/type, authorization timestamps, and transaction status in Order Inspection modal.
+### 3.3 TomPay Gateway Seed Record
+```sql
+INSERT INTO public.payment_gateways (
+  id, type, title, provider_name, is_enabled, environment, publishable_key, min_order_limit, max_order_limit, disclaimer_note, custom_instructions, updated_at
+) VALUES (
+  'gw-tompay',
+  'tompay',
+  'TomPay - Card & Digital Wallet (UK / Global)',
+  'TomPay Financial Services Ltd',
+  true,
+  'live',
+  'tp_live_8Oytj1Sc5WYTaCzZCSDCFDbSjeK0Frwx',
+  500,
+  500000,
+  'Pay securely via TomPay with global credit/debit cards and local wallets.',
+  'Instant redirect to TomPay PCI-DSS Level 1 secure payment checkout session.',
+  NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title,
+  provider_name = EXCLUDED.provider_name,
+  is_enabled = EXCLUDED.is_enabled,
+  publishable_key = EXCLUDED.publishable_key,
+  disclaimer_note = EXCLUDED.disclaimer_note;
+```
 
 ---
 
-## 6. Verification & Testing Matrix
+## 4. Frontend & Backend Implementation Details
 
-- [ ] **Cart Navigation Test**: Click Bag on mobile dock -> navigates to `/cart`; verify `<Header />` and `<MobileAppNavBar />` remain visible.
-- [ ] **Desktop Floating Bag Test**: Click floating cart button on desktop -> navigates to `/cart`; button hides or stays neutral.
-- [ ] **Drawer Absence Test**: Add product to cart -> no full-screen sliding dark backdrop covers the screen.
-- [ ] **First-Time Google Password Setup**: Log in via Google -> Open Settings -> verify title is "Set Account Password" (no Current Password field) -> Enter new password -> Save -> Verify success message.
-- [ ] **Immediate State Switch**: Following password setup, verify UI changes header to "Update Password" and displays "Current Password" field without requiring a page reload.
-- [ ] **Update Password Validation**: Enter incorrect current password -> Verify API returns 400 with "Current password is incorrect."
-- [ ] **Update Password Success**: Enter correct current password + new password -> Verify password is updated in MongoDB and Supabase.
-- [ ] **Email Login with Set Password**: Log out -> Log in using email and the newly set password -> Verify authentication succeeds.
+### 4.1 Safe Order Item Normalizer (`src/utils/orderItem.ts`)
+To prevent any future missing product bugs regardless of order source (Supabase, MongoDB, FileDB, Google Sheets):
+```typescript
+export interface NormalizedOrderItem {
+  title: string;
+  image: string;
+  size: string;
+  grade: string;
+  price: number;
+  quantity: number;
+  product?: any;
+}
+
+export function normalizeOrderItem(it: any): NormalizedOrderItem {
+  const prod = it.product || {};
+  const title = prod.title || it.title || it.name || 'Archival Vintage Piece';
+  const rawImage = (prod.images && prod.images[0]) || it.image || it.imageUrl || (Array.isArray(it.images) && it.images[0]) || '';
+  const image = rawImage && rawImage.trim().length > 0 
+    ? rawImage 
+    : 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=600&q=80';
+  const size = it.selectedSize || it.size || prod.size || 'Standard';
+  const grade = prod.conditionGrade || it.conditionGrade || prod.conditionTier || 'Archival 9/10';
+  const price = Number(prod.price) || Number(it.price) || 0;
+  const quantity = Number(it.quantity) || 1;
+
+  return { title, image, size, grade, price, quantity, product: prod };
+}
+```
+
+### 4.2 Dynamic Supabase Loading in [`StoreContext.tsx`](file:///Users/mmaazfalak/antigravity/Jutakapra_Frontend/src/context/StoreContext.tsx)
+1. **Products Synchronization**:
+   - On load, query `supabase.from('products').select('*').order('date_added', { ascending: false })`.
+   - Map DB snake_case columns (`original_price`, `condition_grade`, `in_stock`, etc.) to frontend `Product` interface.
+   - If Supabase is populated, use it as primary truth. If empty, seed initial catalog into Supabase automatically.
+   - Subscribe to Supabase Realtime channel `public:products` for instant updates without reloads.
+2. **Payment Gateways Synchronization**:
+   - On load, query `supabase.from('payment_gateways').select('*')`.
+   - Merge `gw-tompay` and ensure all active gateways dynamically feed `paymentGateways` state.
+   - Gateways modified in Admin Portal save back directly to Supabase `public.payment_gateways`.
+3. **Order Item Enrichment**:
+   - When `createOrder` runs, ensure `items` store both complete `product` snapshots and top-level item attributes (`name`, `image`, `size`, `price`, `quantity`).
+   - Store customer's email in `localStorage` session so guest checkouts automatically associate with their orders in `CustomerOrdersView.tsx`.
+
+---
+
+## 5. TomPay Checkout Integration
+When a customer selects `gw-tompay`:
+1. Customer initiates order in `CheckoutView.tsx`.
+2. Frontend requests payment session from backend endpoint `POST /api/payments/tompay/create-session`.
+3. Backend creates payment intent using `TOMPAY_API_KEY` and `TOMPAY_API_SECRET`.
+4. Customer is redirected to TomPay's hosted payment gateway.
+5. On TomPay callback / webhook, order status updates to `Confirmed` and triggers the Namecheap SMTP email confirmation.
+
+---
+
+## 6. Execution Roadmap & Safety Constraints
+- [x] Document complete plan and architecture specification.
+- [ ] Create `supabase_products_and_gateways.sql` containing full table DDL, RLS policies, and seed inserts for products and gateways.
+- [ ] Implement `src/utils/orderItem.ts` and apply safe normalizer in `CustomerOrdersView.tsx`, `AccountView.tsx`, and `CheckoutView.tsx`.
+- [ ] Update `StoreContext.tsx` to dynamically query and synchronize `products` and `payment_gateways` with Supabase.
+- [ ] Add TomPay gateway option to `PaymentGatewayType` and checkout selector.
+- [ ] Verify build passes cleanly with zero errors (`npm run build`).
+- [ ] **Strict Constraint**: Do NOT push to GitHub without explicit user instruction.
