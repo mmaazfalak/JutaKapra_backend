@@ -1,0 +1,1 @@
+ALTER TABLE public.payment_gateways DISABLE ROW LEVEL SECURITY;

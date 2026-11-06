@@ -348,6 +348,7 @@ export const PaymentMethodsManager: React.FC = () => {
                     {gw.type === 'jazzcash' && <Smartphone className="w-5 h-5" />}
                     {gw.type === 'bank' && <Building className="w-5 h-5" />}
                     {gw.type === 'stripe' && <CreditCard className="w-5 h-5" />}
+                    {gw.type === 'tompay' && <CreditCard className="w-5 h-5" />}
                     {gw.type === 'custom' && <CreditCard className="w-5 h-5" />}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -369,6 +370,30 @@ export const PaymentMethodsManager: React.FC = () => {
                       <span className="text-[11px] text-slate-400 block mt-0.5">
                         Rider collects payment at customer doorstep.
                       </span>
+                    </div>
+                  ) : (gw.type === 'tompay' || gw.type === 'stripe') ? (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-400 text-[11px] font-sans">API Key:</span>
+                        <div className="flex items-center space-x-1">
+                          <span className="font-bold text-indigo-400 truncate max-w-[170px]">
+                            {isRevealed ? (gw.publishableKey || 'tp_live_8Oyt...Frwx') : maskString(gw.publishableKey || 'tp_live_8Oytj1Sc5WYTaCzZCSDCFDbSjeK0Frwx', 4)}
+                          </span>
+                          {isRevealed && gw.publishableKey && (
+                            <button
+                              onClick={() => handleCopyText(gw.publishableKey || '', 'API Key')}
+                              className="text-slate-400 hover:text-white cursor-pointer"
+                              title="Copy API key"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400 font-sans">Mode:</span>
+                        <span className="text-emerald-400 font-semibold uppercase">{gw.environment || 'live'} • PCI-DSS L1</span>
+                      </div>
                     </div>
                   ) : (
                     <>
@@ -599,6 +624,36 @@ export const PaymentMethodsManager: React.FC = () => {
                         </div>
                       </>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {(formType === 'tompay' || formType === 'stripe') && (
+                <div className="space-y-3 p-3.5 rounded-xl bg-black/20 border border-inherit">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 block">
+                    API Gateway Credentials:
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold mb-1 text-slate-300">API Key / Publishable Key</label>
+                      <input
+                        type="text"
+                        value={formPublishableKey}
+                        onChange={(e) => setFormPublishableKey(e.target.value)}
+                        placeholder="tp_live_..."
+                        className="w-full p-2.5 rounded-lg bg-[#181c24] border border-[#232833] text-white outline-none focus:border-blue-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold mb-1 text-slate-300">API Secret Key (Leave blank to keep existing)</label>
+                      <input
+                        type="password"
+                        value={formSecretKey}
+                        onChange={(e) => setFormSecretKey(e.target.value)}
+                        placeholder="tp_secret_..."
+                        className="w-full p-2.5 rounded-lg bg-[#181c24] border border-[#232833] text-white outline-none focus:border-blue-500 font-mono"
+                      />
+                    </div>
                   </div>
                 </div>
               )}

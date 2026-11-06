@@ -1,10 +1,11 @@
 -- ==============================================================================
--- JUTA.KAPRA: PRODUCTS & PAYMENT GATEWAYS MASTER SCHEMA FOR SUPABASE
+-- JUTA.KAPRA: 100% DYNAMIC PRODUCTS & PAYMENT GATEWAYS MASTER SCHEMA FOR SUPABASE
 -- Run this script in Supabase Dashboard -> SQL Editor -> New Query
--- Target: https://kbdrlhiishmetsddlstq.supabase.co
+-- Target Database: https://kbdrlhiishmetsddlstq.supabase.co
+-- Zero-Code Data Architecture: Every product & payment method lives in Supabase.
 -- ==============================================================================
 
--- 1. PRODUCTS TABLE
+-- 1. PRODUCTS TABLE DDL
 CREATE TABLE IF NOT EXISTS public.products (
   id TEXT PRIMARY KEY,
   slug TEXT NOT NULL UNIQUE,
@@ -39,18 +40,21 @@ CREATE TABLE IF NOT EXISTS public.products (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Indexes for high-speed catalog querying
 CREATE INDEX IF NOT EXISTS idx_products_slug ON public.products(slug);
 CREATE INDEX IF NOT EXISTS idx_products_category ON public.products(category);
 CREATE INDEX IF NOT EXISTS idx_products_in_stock ON public.products(in_stock);
 CREATE INDEX IF NOT EXISTS idx_products_is_hidden ON public.products(is_hidden);
+CREATE INDEX IF NOT EXISTS idx_products_date_added ON public.products(date_added DESC);
 
+-- Row Level Security (RLS)
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public read products" ON public.products;
 CREATE POLICY "Public read products" ON public.products FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Public or service manage products" ON public.products;
 CREATE POLICY "Public or service manage products" ON public.products FOR ALL USING (true) WITH CHECK (true);
 
--- 2. PAYMENT GATEWAYS TABLE
+-- 2. PAYMENT GATEWAYS TABLE DDL
 CREATE TABLE IF NOT EXISTS public.payment_gateways (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL,
@@ -75,252 +79,19 @@ CREATE TABLE IF NOT EXISTS public.payment_gateways (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Indexes & RLS for Payment Gateways
+CREATE INDEX IF NOT EXISTS idx_payment_gateways_type ON public.payment_gateways(type);
+CREATE INDEX IF NOT EXISTS idx_payment_gateways_enabled ON public.payment_gateways(is_enabled);
+
 ALTER TABLE public.payment_gateways ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public read payment gateways" ON public.payment_gateways;
 CREATE POLICY "Public read payment gateways" ON public.payment_gateways FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Public or service manage payment gateways" ON public.payment_gateways;
 CREATE POLICY "Public or service manage payment gateways" ON public.payment_gateways FOR ALL USING (true) WITH CHECK (true);
 
--- 3. SEED PRODUCTS
-INSERT INTO public.products (
-  id, slug, title, category, subcategory, era, price, original_price,
-  condition_grade, condition_tier, size, measurements, description, details,
-  images, in_stock, is_1of1, inventory_type, stock_count, store_id, store_name,
-  is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
-) VALUES (
-  'prod-001', '1993-nirvana-in-utero-tour-tee', '1993 Nirvana "In Utero" Official European Tour Tee', 'Vintage Tees & Trousers', NULL, '1993', 15500, 19000, 'Vintage 9/10 - Single Stitch', 'Good', 'XL', '{"chest":"23.5 in (Pit-to-Pit)","length":"29.5 in (Collar-to-Hem)","shoulders":"21.0 in"}', 'Ultra-rare original 1993 Nirvana In Utero tour t-shirt printed on an authentic Giant by Tee Jays blank. Single stitched sleeves and hem. Gorgeous natural charcoal fade with zero dry rot or stitching unraveling. True archival grail.', '["Original Giant by Tee Jays paper tag present and intact","Single stitch construction throughout hem and sleeves","Natural sun-faded black patina with vibrant front & back print","100% Pre-shrunk Cotton, Made in USA","Archival verified via ultraviolet tag inspection"]', '["https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1000&q=80","https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=1000&q=80","https://images.unsplash.com/photo-1618354691373-d851c5c3a990?auto=format&fit=crop&w=1000&q=80"]', TRUE, TRUE, 'thrift_1of1', 1, 'store-f7-archive', 'F-7 Flagship Archive', FALSE, FALSE, FALSE, TRUE, TRUE, '["Nirvana","Single Stitch","Giant Tag","Band Tee","1-of-1","Rare"]', 'Batch #44: 90s Grunge Grails', '2026-09-10'
-) ON CONFLICT (id) DO UPDATE SET
-  title = EXCLUDED.title,
-  category = EXCLUDED.category,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images,
-  details = EXCLUDED.details,
-  in_stock = EXCLUDED.in_stock,
-  updated_at = NOW();
-
-INSERT INTO public.products (
-  id, slug, title, category, subcategory, era, price, original_price,
-  condition_grade, condition_tier, size, measurements, description, details,
-  images, in_stock, is_1of1, inventory_type, stock_count, store_id, store_name,
-  is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
-) VALUES (
-  'prod-002', '1989-carhartt-j97-detroit-duck-jacket', '1989 Carhartt J97 MOS Detroit Duck Canvas Workwear Jacket', 'Workwear & Jeans', NULL, '1989', 13500, NULL, 'Distressed 8/10 - Authentic Work Patina', 'Distressed 1-of-1', 'L', '{"chest":"25.0 in (Pit-to-Pit)","length":"26.0 in (Collar-to-Hem)","shoulders":"20.5 in"}', 'Iconic Union-Made Carhartt Detroit Jacket in sought-after Moss Green (MOS). Features heavy blanket lining, corduroy collar, and authentic industrial grease and paint splatters from decades of real workshop use. Zipper pulls smoothly.', '["Union Made in USA with vintage white fabric craft tag","Heavyweight 12oz firm-hand duck canvas with striped blanket lining","Brown corduroy top collar & heavy brass YKK chest zipper","Boxy, cropped workwear silhouette with bi-swing action back","Original brass snap cuffs and waist adjusters"]', '["https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=1000&q=80","https://images.unsplash.com/photo-1548883354-7622d03aca27?auto=format&fit=crop&w=1000&q=80","https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=1000&q=80"]', TRUE, TRUE, 'thrift_1of1', 1, 'store-f7-archive', 'F-7 Flagship Archive', FALSE, FALSE, FALSE, FALSE, TRUE, '["Carhartt","Detroit Jacket","Workwear","Union Made","Moss Green","Blanket Lined"]', 'Batch #44: 90s Grunge Grails', '2026-09-12'
-) ON CONFLICT (id) DO UPDATE SET
-  title = EXCLUDED.title,
-  category = EXCLUDED.category,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images,
-  details = EXCLUDED.details,
-  in_stock = EXCLUDED.in_stock,
-  updated_at = NOW();
-
-INSERT INTO public.products (
-  id, slug, title, category, subcategory, era, price, original_price,
-  condition_grade, condition_tier, size, measurements, description, details,
-  images, in_stock, is_1of1, inventory_type, stock_count, store_id, store_name,
-  is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
-) VALUES (
-  'prod-003', '1994-air-jordan-1-retro-chicago', '1994 Nike Air Jordan 1 Retro "Chicago" OG High', 'Sneakers & Boots', NULL, '1994', 45000, 55000, 'Vintage 9.5/10 - OG Box Included', 'Mint', 'US 10.5', '{"shoeSize":"US Men 10.5 (EU 44.5 / 28.5cm)"}', 'The legendary 1994 Nike Air Jordan 1 Chicago reissue—widely revered as having the highest quality full-grain leather ever put on a Jordan 1. Comes complete with the original 1994 silver box, retro card, and black/white lace sets. Soles are supple and 100% wearable.', '["Original 1994 production with internal stamp 940810-TY","Buttery vintage calf leather upper with deep red pigmentation","Zero midsole crumbling; rubber outsole has full star traction","Includes original archival silver Jordan face-box and collector card","Professionally conditioned with Saphir Medaille d''Or"]', '["https://images.unsplash.com/photo-1552346154-21d32810aba3?auto=format&fit=crop&w=1000&q=80","https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?auto=format&fit=crop&w=1000&q=80","https://images.unsplash.com/photo-1607522370275-f14206abe5d3?auto=format&fit=crop&w=1000&q=80"]', TRUE, TRUE, 'thrift_1of1', 1, 'store-f7-archive', 'F-7 Flagship Archive', FALSE, FALSE, FALSE, TRUE, TRUE, '["Jordan 1","1994","Chicago","Sneakers","OG Box","Deadstock Feel"]', 'Batch #43: Sneakerhead Archives', '2026-09-08'
-) ON CONFLICT (id) DO UPDATE SET
-  title = EXCLUDED.title,
-  category = EXCLUDED.category,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images,
-  details = EXCLUDED.details,
-  in_stock = EXCLUDED.in_stock,
-  updated_at = NOW();
-
-INSERT INTO public.products (
-  id, slug, title, category, subcategory, era, price, original_price,
-  condition_grade, condition_tier, size, measurements, description, details,
-  images, in_stock, is_1of1, inventory_type, stock_count, store_id, store_name,
-  is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
-) VALUES (
-  'prod-004', '1988-sonic-youth-daydream-nation-tee', '1988 Sonic Youth "Daydream Nation" Candle Graphic Tee', 'Vintage Tees & Trousers', NULL, '1988', 18500, NULL, 'Vintage 8.5/10 - Single Stitch Grail', 'Good', 'L', '{"chest":"22.0 in (Pit-to-Pit)","length":"28.0 in (Collar-to-Hem)","shoulders":"19.5 in"}', 'First press original promotional t-shirt for Sonic Youth''s landmark double LP "Daydream Nation", featuring Gerhard Richter''s iconic photorealistic candle painting "Kerze". Printed on vintage Fruit of the Loom single-stitch blank.', '["Single-stitch cuffs and waist hem","Original 1988 Blast First / Enigma Records credit line in print","Soft featherweight cotton with beautiful cracked screenprint patina","No pinholes, tears, or staining"]', '["https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=1000&q=80","https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1000&q=80"]', TRUE, TRUE, 'thrift_1of1', 1, 'store-f7-archive', 'F-7 Flagship Archive', FALSE, FALSE, FALSE, FALSE, FALSE, '["Sonic Youth","Daydream Nation","Single Stitch","Indie Rock","Gerhard Richter"]', 'Batch #42: No Wave & Indie', '2026-09-05'
-) ON CONFLICT (id) DO UPDATE SET
-  title = EXCLUDED.title,
-  category = EXCLUDED.category,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images,
-  details = EXCLUDED.details,
-  in_stock = EXCLUDED.in_stock,
-  updated_at = NOW();
-
-INSERT INTO public.products (
-  id, slug, title, category, subcategory, era, price, original_price,
-  condition_grade, condition_tier, size, measurements, description, details,
-  images, in_stock, is_1of1, inventory_type, stock_count, store_id, store_name,
-  is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
-) VALUES (
-  'prod-005', '1998-arcteryx-theta-ar-golden-embroidery', '1998 Arc''teryx Theta AR GORE-TEX Golden Embroidered Shell', 'Jackets & Coats', NULL, '1998', 26000, 32000, 'Vintage 9/10 - Factory Seam Repaired', 'Mint', 'M', '{"chest":"24.0 in (Pit-to-Pit)","length":"31.0 in (Back Drop Hem)","shoulders":"Raglan"}', 'First-generation Made in Canada Arc''teryx Theta AR alpine jacket. Features rare metallic golden embroidered fossil bird logo and original 3-layer GORE-TEX XCR membrane. Seam tapes have been professionally refreshed by Arc''teryx Vancouver.', '["Handmade in Vancouver, British Columbia, Canada","Original gold threaded Archaeopteryx fossil chest embroidery","Drop-back hem with dual shock-cord adjustments","Watertight reverse-coil front zipper with storm flap","Internal zip security pocket with serial number badge"]', '["https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&w=1000&q=80","https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=1000&q=80"]', TRUE, TRUE, 'thrift_1of1', 1, 'store-f7-archive', 'F-7 Flagship Archive', FALSE, FALSE, FALSE, TRUE, TRUE, '["Arc''teryx","Theta AR","GORE-TEX","Made in Canada","Gorpcore","Golden Bird"]', 'Batch #44: 90s Grunge Grails', '2026-09-14'
-) ON CONFLICT (id) DO UPDATE SET
-  title = EXCLUDED.title,
-  category = EXCLUDED.category,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images,
-  details = EXCLUDED.details,
-  in_stock = EXCLUDED.in_stock,
-  updated_at = NOW();
-
-INSERT INTO public.products (
-  id, slug, title, category, subcategory, era, price, original_price,
-  condition_grade, condition_tier, size, measurements, description, details,
-  images, in_stock, is_1of1, inventory_type, stock_count, store_id, store_name,
-  is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
-) VALUES (
-  'prod-006', '1976-levis-501-66-single-stitch-redline', '1976 Levi''s 501 "66 Single" Redline Selvedge Denim Jeans', 'Workwear & Jeans', NULL, '1976', 16500, NULL, 'Distressed 8/10 - Natural Whiskers & Honeycombs', 'Distressed 1-of-1', '32x31', '{"waist":"32.0 in (16.0 in flat across)","inseam":"31.0 in (Chain-stitched)","length":"41.5 in (Outseam)"}', 'Genuine transitional 1976 "66 Single" Levi''s 501 jeans featuring single-stitch back pocket construction and pink redline selvedge ID. Natural indigo whiskers and honeycombs with light vintage fraying at the pocket edge. No blown crotch.', '["Top button stamped \"6\" corresponding to vintage El Paso factory","Small \"e\" red tab with single stitch horizontal back pocket arcs","Pinkish red-line selvedge visible at outseams","Original chainstitch hem intact with roping effect","Pure Cone Mills White Oak shrink-to-fit denim"]', '["https://images.unsplash.com/photo-1542272604-787c3835535d?auto=format&fit=crop&w=1000&q=80","https://images.unsplash.com/photo-1541099649105-f69ad21f3246?auto=format&fit=crop&w=1000&q=80"]', TRUE, TRUE, 'thrift_1of1', 1, 'store-f7-archive', 'F-7 Flagship Archive', FALSE, FALSE, FALSE, FALSE, FALSE, '["Levi''s 501","66 Single","Selvedge","Redline","Cone Mills","Vintage Denim"]', 'Batch #41: Americana Workwear', '2026-09-02'
-) ON CONFLICT (id) DO UPDATE SET
-  title = EXCLUDED.title,
-  category = EXCLUDED.category,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images,
-  details = EXCLUDED.details,
-  in_stock = EXCLUDED.in_stock,
-  updated_at = NOW();
-
-INSERT INTO public.products (
-  id, slug, title, category, subcategory, era, price, original_price,
-  condition_grade, condition_tier, size, measurements, description, details,
-  images, in_stock, is_1of1, inventory_type, stock_count, store_id, store_name,
-  is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
-) VALUES (
-  'prod-007', '2002-nike-dunk-low-pro-sb-reese-forbes', '2002 Nike Dunk Low Pro SB "Reese Forbes" Wheat', 'Sneakers & Boots', NULL, '2002', 38000, NULL, 'Vintage 8.5/10 - Silver Box Era', 'Good', 'US 10.0', '{"shoeSize":"US Men 10.0 (EU 44 / 28.0cm)"}', 'Grail status Nike SB Dunk Low designed by skateboard icon Reese Forbes in 2002. Triple-suede monochromatic wheat construction with stuffed tongue and Zoom Air insole. Suede is buttery smooth with minimal nap wear.', '["Original Orange Box / Silver Box transition production batch","Premium triple-tone wheat pigskin suede upper","Iconic fat stuffed skateboarding tongue with Nike SB patch","Includes replacement OG oval wheat laces and protective shoe trees"]', '["https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=1000&q=80","https://images.unsplash.com/photo-1600185365926-3a2ce3cdb9eb?auto=format&fit=crop&w=1000&q=80"]', TRUE, TRUE, 'thrift_1of1', 1, 'store-f7-archive', 'F-7 Flagship Archive', FALSE, FALSE, FALSE, FALSE, TRUE, '["Nike SB","Dunk Low","Reese Forbes","Wheat Suede","Fat Tongue","Silver Box"]', 'Batch #43: Sneakerhead Archives', '2026-09-11'
-) ON CONFLICT (id) DO UPDATE SET
-  title = EXCLUDED.title,
-  category = EXCLUDED.category,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images,
-  details = EXCLUDED.details,
-  in_stock = EXCLUDED.in_stock,
-  updated_at = NOW();
-
-INSERT INTO public.products (
-  id, slug, title, category, subcategory, era, price, original_price,
-  condition_grade, condition_tier, size, measurements, description, details,
-  images, in_stock, is_1of1, inventory_type, stock_count, store_id, store_name,
-  is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
-) VALUES (
-  'prod-008', '1995-stussy-international-tribe-varsity', '1995 Stüssy "International Stüssy Tribe" Leather Varsity', 'Workwear & Jeans', NULL, '1995', 28000, 35000, 'Vintage 9/10 - Immaculate Leather', 'Mint', 'XL', '{"chest":"26.0 in (Pit-to-Pit)","length":"27.5 in (Collar-to-Hem)","shoulders":"21.5 in"}', 'Holy grail streetwear piece from Shawn Stüssy''s prime era. Heavy Melton wool body in deep navy with buttery off-white cowhide leather sleeves. Chenille IST embroidery on back and embroidered crest patches across both sleeves.', '["Heavyweight 24oz virgin melton wool body","Full grain supple naked cowhide leather sleeves with rib knit trims","Quilted satin interior thermal lining with internal breast pocket","Authentic 90s Stüssy Sport black woven neck label"]', '["https://images.unsplash.com/photo-1548883354-7622d03aca27?auto=format&fit=crop&w=1000&q=80","https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=1000&q=80"]', TRUE, TRUE, 'thrift_1of1', 1, 'store-f7-archive', 'F-7 Flagship Archive', FALSE, FALSE, FALSE, TRUE, TRUE, '["Stüssy","IST","Varsity Jacket","Vintage Streetwear","Wool & Leather"]', 'Batch #44: 90s Grunge Grails', '2026-09-13'
-) ON CONFLICT (id) DO UPDATE SET
-  title = EXCLUDED.title,
-  category = EXCLUDED.category,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images,
-  details = EXCLUDED.details,
-  in_stock = EXCLUDED.in_stock,
-  updated_at = NOW();
-
-INSERT INTO public.products (
-  id, slug, title, category, subcategory, era, price, original_price,
-  condition_grade, condition_tier, size, measurements, description, details,
-  images, in_stock, is_1of1, inventory_type, stock_count, store_id, store_name,
-  is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
-) VALUES (
-  'prod-009', '1993-oakley-sub-zero-sunglasses', '1993 Oakley Sub Zero #0.3N Archival Mirrored Sunglasses', 'Accessories', 'glasses', '1993', 14500, NULL, 'Mint 10/10 - Deadstock with Microbag', 'Deadstock', 'One Size', '{"shoeSize":"Frameless wrap design (0.69 oz / 20 grams)"}', 'Pioneering biomimetic design from Jim Jannard''s early Oakley labs. The Sub Zero weighs a mind-bending 20 grams with a continuous rimless Plutonite lens and Iridium mirror coating. Zero scratches on optics.', '["Original 1993 USA production with patent stamp inside earstem","Deep blue-purple Iridium polarized lens shield","Unobtainium earsocks that grip tighter as moisture increases","Comes with authentic 1993 Oakley skull microclear pouch"]', '["https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&w=1000&q=80","https://images.unsplash.com/photo-1572635196237-14b3f281503f?auto=format&fit=crop&w=1000&q=80"]', TRUE, TRUE, 'thrift_1of1', 1, 'store-f7-archive', 'F-7 Flagship Archive', FALSE, FALSE, FALSE, FALSE, FALSE, '["Oakley","Sub Zero","Archival Tech","Y2K Matrix","Vintage Sunglasses"]', 'Batch #42: No Wave & Indie', '2026-09-04'
-) ON CONFLICT (id) DO UPDATE SET
-  title = EXCLUDED.title,
-  category = EXCLUDED.category,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images,
-  details = EXCLUDED.details,
-  in_stock = EXCLUDED.in_stock,
-  updated_at = NOW();
-
-INSERT INTO public.products (
-  id, slug, title, category, subcategory, era, price, original_price,
-  condition_grade, condition_tier, size, measurements, description, details,
-  images, in_stock, is_1of1, inventory_type, stock_count, store_id, store_name,
-  is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
-) VALUES (
-  'prod-010', '1996-chicago-bulls-championship-rap-tee', '1996 Chicago Bulls "72-10 Unstoppabulls" Rap Tee Style', 'Vintage Tees & Trousers', NULL, '1996', 12500, NULL, 'Vintage 8.5/10 - Single Stitch Bottom', 'Good', 'XL', '{"chest":"24.0 in (Pit-to-Pit)","length":"30.0 in (Collar-to-Hem)","shoulders":"22.0 in"}', 'Authentic 1996 NBA Finals Championship commemorative all-over print featuring Jordan, Pippen, and Rodman in dramatic bootleg rap-tee style. Bold neon metallic highlights and dramatic trophy graphic on back.', '["Original Nutmeg Mills 1996 licensing tag","Single stitch construction at hem and sleeve cuffs","Vibrant screen-print colors with slight natural crackle","100% heavyweight vintage ring-spun cotton"]', '["https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1000&q=80","https://images.unsplash.com/photo-1618354691373-d851c5c3a990?auto=format&fit=crop&w=1000&q=80"]', TRUE, TRUE, 'thrift_1of1', 1, 'store-f7-archive', 'F-7 Flagship Archive', FALSE, FALSE, FALSE, FALSE, TRUE, '["Chicago Bulls","Jordan 96","Rap Tee Style","Single Stitch","Vintage NBA"]', 'Batch #43: Sneakerhead Archives', '2026-09-09'
-) ON CONFLICT (id) DO UPDATE SET
-  title = EXCLUDED.title,
-  category = EXCLUDED.category,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images,
-  details = EXCLUDED.details,
-  in_stock = EXCLUDED.in_stock,
-  updated_at = NOW();
-
-INSERT INTO public.products (
-  id, slug, title, category, subcategory, era, price, original_price,
-  condition_grade, condition_tier, size, measurements, description, details,
-  images, in_stock, is_1of1, inventory_type, stock_count, store_id, store_name,
-  is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
-) VALUES (
-  'prod-011', '1985-schott-perfecto-618-leather-jacket', '1985 Schott NYC Perfecto 618 Steerhide Leather Biker Jacket', 'Jackets & Coats', NULL, '1985', 24000, 30000, 'Vintage 9/10 - Heavy Grain Leather', 'Mint', '42 (Fits L)', '{"chest":"23.5 in (Pit-to-Pit)","length":"25.0 in (Collar-to-Hem)","shoulders":"19.5 in"}', 'The archetype American motorcycle jacket. 1980s Schott 618 made in New Jersey with thick chrome-tanned steerhide leather, Talon zippers, asymmetrical zip front, snap-down lapels, and attached half belt with nickel-plated buckle.', '["Made in Union, NJ USA with vintage bull neck Schott Perfecto tag","Heavyweight drum-dyed steerhide that stands on its own","Original Talon bell-pull sleeve zippers functioning seamlessly","Quilted nylon insulation lining with clean leather kidney extension"]', '["https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=1000&q=80","https://images.unsplash.com/photo-1548883354-7622d03aca27?auto=format&fit=crop&w=1000&q=80"]', FALSE, TRUE, 'thrift_1of1', 1, 'store-f7-archive', 'F-7 Flagship Archive', FALSE, FALSE, FALSE, TRUE, FALSE, '["Schott NYC","Perfecto 618","Steerhide","Talon Zippers","Punk Rock","Made in USA"]', 'Batch #40: American Bikers', '2026-08-28'
-) ON CONFLICT (id) DO UPDATE SET
-  title = EXCLUDED.title,
-  category = EXCLUDED.category,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images,
-  details = EXCLUDED.details,
-  in_stock = EXCLUDED.in_stock,
-  updated_at = NOW();
-
-INSERT INTO public.products (
-  id, slug, title, category, subcategory, era, price, original_price,
-  condition_grade, condition_tier, size, measurements, description, details,
-  images, in_stock, is_1of1, inventory_type, stock_count, store_id, store_name,
-  is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
-) VALUES (
-  'prod-012', 'archival-silver-floral-cross-heavy-ring', 'Archival .925 Solid Silver Heavy Floral Cross Band Ring', 'Accessories', 'wallets', '1998', 9500, NULL, 'Vintage 9.5/10 - Darkened Oxidation Patina', 'Good', 'One Size', '{"shoeSize":"Compact Bi-Fold 4.5\" x 3.5\""}', 'Heavy gothic floral motif silver ring and bifold leather wallet with intricate medieval repoussé sculpting.', '["Cast in solid .925 Sterling Silver weighing a substantial 16.2 grams","Hand stamped hallmark and purity marks inside the shank","Heirloom gothic floral scrollwork circling the entire perimeter","Includes raw canvas Juta Kapra jewel bag"]', '["https://images.unsplash.com/photo-1605100804763-247f67b3557e?auto=format&fit=crop&w=1000&q=80","https://images.unsplash.com/photo-1572635196237-14b3f281503f?auto=format&fit=crop&w=1000&q=80"]', TRUE, TRUE, 'thrift_1of1', 1, 'store-f7-archive', 'F-7 Flagship Archive', FALSE, FALSE, FALSE, FALSE, FALSE, '["Wallet","Leather","Silver 925","Jewelry","Archival Silver"]', 'Batch #42: No Wave & Indie', '2026-09-06'
-) ON CONFLICT (id) DO UPDATE SET
-  title = EXCLUDED.title,
-  category = EXCLUDED.category,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images,
-  details = EXCLUDED.details,
-  in_stock = EXCLUDED.in_stock,
-  updated_at = NOW();
-
-INSERT INTO public.products (
-  id, slug, title, category, subcategory, era, price, original_price,
-  condition_grade, condition_tier, size, measurements, description, details,
-  images, in_stock, is_1of1, inventory_type, stock_count, store_id, store_name,
-  is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
-) VALUES (
-  'prod-013', '1984-seiko-7548-7000-quartz-diver-watch', '1984 Seiko 7548-7000 Vintage Quartz Diver Watch', 'Accessories', 'watch', '1984', 28500, NULL, 'Vintage 9/10 - Serviced Movement', 'Mint', '42mm', '{"shoeSize":"Case: 42mm | Lug Width: 22mm"}', 'Iconic 1980s Seiko professional diver watch with original matte black dial, patina hands, and bi-directional click bezel. Fully serviced high-torque quartz movement.', '["Original Kanji/English day-date wheel","Solid stainless steel screw-down caseback","Matched vintage GL831 rubber diver strap included"]', '["https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=1000&q=80"]', TRUE, TRUE, 'thrift_1of1', 1, 'store-f7-archive', 'F-7 Flagship Archive', FALSE, FALSE, FALSE, TRUE, TRUE, '["Seiko","Watch","Diver","Japan Made","1980s"]', 'Batch #44: 90s Grunge Grails', '2026-09-15'
-) ON CONFLICT (id) DO UPDATE SET
-  title = EXCLUDED.title,
-  category = EXCLUDED.category,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images,
-  details = EXCLUDED.details,
-  in_stock = EXCLUDED.in_stock,
-  updated_at = NOW();
-
-INSERT INTO public.products (
-  id, slug, title, category, subcategory, era, price, original_price,
-  condition_grade, condition_tier, size, measurements, description, details,
-  images, in_stock, is_1of1, inventory_type, stock_count, store_id, store_name,
-  is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
-) VALUES (
-  'prod-014', '1995-porter-yoshida-tanker-helmet-bag', '1995 Porter Yoshida & Co. Tanker Nylon Helmet Bag', 'Accessories', 'bags', '1995', 19500, NULL, 'Vintage 9.5/10 - Sage Green Flight Nylon', 'Good', 'One Size', '{"shoeSize":"W: 480mm H: 500mm"}', 'Authentic 1990s Porter Yoshida Tanker helmet bag inspired by US Air Force MA-1 flight jackets. Features high-density sage green nylon with signature Rescue Orange inner lining.', '["Made in Japan by Yoshida & Co.","Heavy-duty brass snap fasteners and YKK dual zippers","Twin front flap pockets & padded main compartment"]', '["https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=1000&q=80"]', TRUE, TRUE, 'thrift_1of1', 1, 'store-f7-archive', 'F-7 Flagship Archive', FALSE, FALSE, FALSE, FALSE, TRUE, '["Porter","Yoshida","Bag","Japan Made","Nylon"]', 'Batch #44: 90s Grunge Grails', '2026-09-14'
-) ON CONFLICT (id) DO UPDATE SET
-  title = EXCLUDED.title,
-  category = EXCLUDED.category,
-  price = EXCLUDED.price,
-  description = EXCLUDED.description,
-  images = EXCLUDED.images,
-  details = EXCLUDED.details,
-  in_stock = EXCLUDED.in_stock,
-  updated_at = NOW();
-
--- 4. SEED PAYMENT GATEWAYS (INCLUDING TOMPAY)
+-- ------------------------------------------------------------------------------
+-- 3. SEED PAYMENT GATEWAYS (COD, Easypaisa, JazzCash, Meezan Bank, Stripe, TomPay)
+-- ------------------------------------------------------------------------------
 INSERT INTO public.payment_gateways (
   id, type, title, provider_name, is_enabled, environment, account_title, account_number,
   iban, swift_code, bank_name, min_order_limit, max_order_limit, disclaimer_note, custom_instructions,
@@ -331,7 +102,8 @@ INSERT INTO public.payment_gateways (
   title = EXCLUDED.title,
   provider_name = EXCLUDED.provider_name,
   is_enabled = EXCLUDED.is_enabled,
-  publishable_key = EXCLUDED.publishable_key,
+  min_order_limit = EXCLUDED.min_order_limit,
+  max_order_limit = EXCLUDED.max_order_limit,
   disclaimer_note = EXCLUDED.disclaimer_note,
   updated_at = NOW();
 
@@ -345,8 +117,9 @@ INSERT INTO public.payment_gateways (
   title = EXCLUDED.title,
   provider_name = EXCLUDED.provider_name,
   is_enabled = EXCLUDED.is_enabled,
-  publishable_key = EXCLUDED.publishable_key,
-  disclaimer_note = EXCLUDED.disclaimer_note,
+  account_title = EXCLUDED.account_title,
+  account_number = EXCLUDED.account_number,
+  custom_instructions = EXCLUDED.custom_instructions,
   updated_at = NOW();
 
 INSERT INTO public.payment_gateways (
@@ -359,8 +132,9 @@ INSERT INTO public.payment_gateways (
   title = EXCLUDED.title,
   provider_name = EXCLUDED.provider_name,
   is_enabled = EXCLUDED.is_enabled,
-  publishable_key = EXCLUDED.publishable_key,
-  disclaimer_note = EXCLUDED.disclaimer_note,
+  account_title = EXCLUDED.account_title,
+  account_number = EXCLUDED.account_number,
+  custom_instructions = EXCLUDED.custom_instructions,
   updated_at = NOW();
 
 INSERT INTO public.payment_gateways (
@@ -373,8 +147,12 @@ INSERT INTO public.payment_gateways (
   title = EXCLUDED.title,
   provider_name = EXCLUDED.provider_name,
   is_enabled = EXCLUDED.is_enabled,
-  publishable_key = EXCLUDED.publishable_key,
-  disclaimer_note = EXCLUDED.disclaimer_note,
+  account_title = EXCLUDED.account_title,
+  account_number = EXCLUDED.account_number,
+  iban = EXCLUDED.iban,
+  swift_code = EXCLUDED.swift_code,
+  bank_name = EXCLUDED.bank_name,
+  custom_instructions = EXCLUDED.custom_instructions,
   updated_at = NOW();
 
 INSERT INTO public.payment_gateways (
@@ -388,7 +166,6 @@ INSERT INTO public.payment_gateways (
   provider_name = EXCLUDED.provider_name,
   is_enabled = EXCLUDED.is_enabled,
   publishable_key = EXCLUDED.publishable_key,
-  disclaimer_note = EXCLUDED.disclaimer_note,
   updated_at = NOW();
 
 INSERT INTO public.payment_gateways (
@@ -402,6 +179,376 @@ INSERT INTO public.payment_gateways (
   provider_name = EXCLUDED.provider_name,
   is_enabled = EXCLUDED.is_enabled,
   publishable_key = EXCLUDED.publishable_key,
+  min_order_limit = EXCLUDED.min_order_limit,
+  max_order_limit = EXCLUDED.max_order_limit,
   disclaimer_note = EXCLUDED.disclaimer_note,
+  custom_instructions = EXCLUDED.custom_instructions,
   updated_at = NOW();
 
+-- ------------------------------------------------------------------------------
+-- 4. SEED 13 AI-GENERATED 1-OF-1 ARCHIVAL VINTAGE PRODUCTS
+-- ------------------------------------------------------------------------------
+
+INSERT INTO public.products (
+  id, slug, title, category, subcategory, era, price, original_price, condition_grade, condition_tier,
+  size, measurements, description, details, images, in_stock, is_1of1, inventory_type, stock_count,
+  store_id, store_name, is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
+) VALUES (
+  'jk-archival-001',
+  '1994-carhartt-detroit-canvas-work-jacket',
+  '1994 Carhartt Detroit Canvas Work Jacket',
+  'Apparel',
+  'Workwear & Jackets',
+  '1990s',
+  16500.00,
+  22000.00,
+  'Vintage 9/10 - Natural Faded Patina',
+  'Good',
+  'L',
+  '{"chest": "24.0 in", "length": "27.5 in", "shoulders": "20.5 in", "sleeve": "25.0 in"}'::jsonb,
+  'Original 1994 Carhartt J97 MOS Detroit duck canvas jacket in washed tan with signature contrast corduroy collar and heavy brass zip. Natural honeycombing and authentic workwear patina with zero structural tears.',
+  '["Heavyweight 12oz firm hand cotton duck", "Blanket lined body with quilted nylon sleeve lining", "Corduroy top collar with under-collar snaps", "Zippered left chest pocket with Carhartt patch", "Made in USA"]'::jsonb,
+  '["/images/products/carhartt-detroit-jacket.jpg"]'::jsonb,
+  TRUE, TRUE, 'thrift_1of1', 1,
+  'store-f7-archive', 'F-7 Flagship Archive',
+  FALSE, FALSE, FALSE, TRUE, TRUE,
+  '["Carhartt", "Detroit", "Workwear", "1-of-1", "Vintage", "Duck Canvas"]'::jsonb,
+  'Batch #48: Archival Workwear', NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title, price = EXCLUDED.price, images = EXCLUDED.images, details = EXCLUDED.details, measurements = EXCLUDED.measurements, updated_at = NOW();
+
+INSERT INTO public.products (
+  id, slug, title, category, subcategory, era, price, original_price, condition_grade, condition_tier,
+  size, measurements, description, details, images, in_stock, is_1of1, inventory_type, stock_count,
+  store_id, store_name, is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
+) VALUES (
+  'jk-archival-002',
+  '1993-nirvana-in-utero-official-tour-tee',
+  '1993 Nirvana "In Utero" Official European Tour Tee',
+  'Apparel',
+  'Graphic Tees',
+  '1990s',
+  24000.00,
+  30000.00,
+  'Vintage 9/10 - Single Stitch Archival',
+  'Mint Vintage',
+  'XL',
+  '{"chest": "23.5 in", "length": "29.5 in", "shoulders": "21.0 in", "sleeve": "8.5 in"}'::jsonb,
+  'Ultra-rare authentic 1993 Nirvana In Utero European tour graphic tee printed on authentic Giant by Tee Jays heavyweight blank. Single-stitched sleeves and waist hem with stunning sun-bleached charcoal fade.',
+  '["Original Giant paper tag intact", "Single stitch throughout sleeves and hem", "Sun-faded charcoal wash with vibrant front angel & back tour dates", "Zero dry rot or stitch unraveling"]'::jsonb,
+  '["/images/products/nirvana-in-utero-tee.jpg"]'::jsonb,
+  TRUE, TRUE, 'thrift_1of1', 1,
+  'store-f7-archive', 'F-7 Flagship Archive',
+  FALSE, FALSE, FALSE, TRUE, TRUE,
+  '["Nirvana", "In Utero", "Band Tee", "Single Stitch", "1-of-1", "90s Grunge"]'::jsonb,
+  'Batch #48: Archival Workwear', NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title, price = EXCLUDED.price, images = EXCLUDED.images, details = EXCLUDED.details, measurements = EXCLUDED.measurements, updated_at = NOW();
+
+INSERT INTO public.products (
+  id, slug, title, category, subcategory, era, price, original_price, condition_grade, condition_tier,
+  size, measurements, description, details, images, in_stock, is_1of1, inventory_type, stock_count,
+  store_id, store_name, is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
+) VALUES (
+  'jk-archival-003',
+  '1992-polo-ralph-lauren-stadium-windbreaker',
+  '1992 Polo Ralph Lauren Stadium 1992 Windbreaker',
+  'Apparel',
+  'Outerwear',
+  '1990s',
+  32000.00,
+  45000.00,
+  'Archive 9.5/10 - Collector Grail',
+  'Mint Vintage',
+  'L',
+  '{"chest": "25.0 in", "length": "27.0 in", "shoulders": "22.0 in", "sleeve": "24.5 in"}'::jsonb,
+  'Holy grail of vintage Americana sportswear: the 1992 Polo Ralph Lauren Stadium Olympic collection windbreaker. Featuring iconic navy, red, and white colorblocking with original embroidered Stadium patches.',
+  '["Original 1992 Polo Stadium badge", "Colorblocked nylon shell with breathable mesh lining", "Stowaway hood and drawcord waist", "Collector-grade preservation"]'::jsonb,
+  '["/images/products/ralph-lauren-stadium-1992.jpg"]'::jsonb,
+  TRUE, TRUE, 'thrift_1of1', 1,
+  'store-f7-archive', 'F-7 Flagship Archive',
+  FALSE, FALSE, FALSE, FALSE, TRUE,
+  '["Polo", "Stadium 1992", "Ralph Lauren", "Grail", "Sportswear", "1-of-1"]'::jsonb,
+  'Batch #48: Archival Workwear', NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title, price = EXCLUDED.price, images = EXCLUDED.images, details = EXCLUDED.details, measurements = EXCLUDED.measurements, updated_at = NOW();
+
+INSERT INTO public.products (
+  id, slug, title, category, subcategory, era, price, original_price, condition_grade, condition_tier,
+  size, measurements, description, details, images, in_stock, is_1of1, inventory_type, stock_count,
+  store_id, store_name, is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
+) VALUES (
+  'jk-archival-004',
+  '1988-schott-nyc-type-a2-cowhide-bomber',
+  '1988 Schott NYC Type A-2 Cowhide Flight Bomber',
+  'Apparel',
+  'Leather & Outerwear',
+  '1980s',
+  28500.00,
+  38000.00,
+  'Vintage 8.5/10 - Aged Leather Patina',
+  'Good',
+  '42 (L)',
+  '{"chest": "23.0 in", "length": "26.5 in", "shoulders": "19.5 in", "sleeve": "25.5 in"}'::jsonb,
+  'Vintage 1988 Schott NYC military Type A-2 flight jacket in full-grain naked cowhide. Deep mahogany brown with authentic distressed surface wear, heavy Talon brass zipper, and dual snap-flap pockets.',
+  '["Full-grain American steerhide/cowhide", "Original Talon brass zipper", "Dual-entry front patch pockets", "Knit wool cuffs and waistband intact", "Made in Union, NJ, USA"]'::jsonb,
+  '["/images/products/schott-nyc-type-a2-leather.jpg"]'::jsonb,
+  TRUE, TRUE, 'thrift_1of1', 1,
+  'store-f7-archive', 'F-7 Flagship Archive',
+  FALSE, FALSE, FALSE, TRUE, FALSE,
+  '["Schott NYC", "Leather Bomber", "Type A-2", "Flight Jacket", "1-of-1", "Made in USA"]'::jsonb,
+  'Batch #48: Archival Workwear', NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title, price = EXCLUDED.price, images = EXCLUDED.images, details = EXCLUDED.details, measurements = EXCLUDED.measurements, updated_at = NOW();
+
+INSERT INTO public.products (
+  id, slug, title, category, subcategory, era, price, original_price, condition_grade, condition_tier,
+  size, measurements, description, details, images, in_stock, is_1of1, inventory_type, stock_count,
+  store_id, store_name, is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
+) VALUES (
+  'jk-archival-005',
+  '1996-champion-reverse-weave-heather-grey-hoodie',
+  '1996 Champion Reverse Weave Heavyweight Boxy Hoodie',
+  'Apparel',
+  'Hoodies & Sweats',
+  '1990s',
+  11500.00,
+  15000.00,
+  'Vintage 9/10 - Sun Bleached',
+  'Good',
+  'XL',
+  '{"chest": "25.5 in", "length": "28.0 in", "shoulders": "22.5 in", "sleeve": "24.5 in"}'::jsonb,
+  '90s heavyweight Champion Reverse Weave pullover hoodie in classic silver-heather grey. Side gusset rib panels, embroidered C patch on left wrist, double-ply hood, and signature boxy drape.',
+  '["Original Champion blue-bar embroidered tag", "Signature vertical fleece grain with side rib knit panels", "12oz cross-grain heavyweight fleece", "Made in USA"]'::jsonb,
+  '["/images/products/champion-reverse-weave-hoodie.jpg"]'::jsonb,
+  TRUE, TRUE, 'thrift_1of1', 1,
+  'store-f7-archive', 'F-7 Flagship Archive',
+  FALSE, FALSE, FALSE, FALSE, TRUE,
+  '["Champion", "Reverse Weave", "Heather Grey", "Boxy Cut", "Vintage Hoodie"]'::jsonb,
+  'Batch #48: Archival Workwear', NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title, price = EXCLUDED.price, images = EXCLUDED.images, details = EXCLUDED.details, measurements = EXCLUDED.measurements, updated_at = NOW();
+
+INSERT INTO public.products (
+  id, slug, title, category, subcategory, era, price, original_price, condition_grade, condition_tier,
+  size, measurements, description, details, images, in_stock, is_1of1, inventory_type, stock_count,
+  store_id, store_name, is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
+) VALUES (
+  'jk-archival-006',
+  '1997-stussy-international-tribe-flannel',
+  '1997 Stüssy International Tribe Shadow Plaid Flannel',
+  'Apparel',
+  'Shirts',
+  '1990s',
+  13500.00,
+  17000.00,
+  'Vintage 9/10 - Soft Brushed Cotton',
+  'Good',
+  'L',
+  '{"chest": "24.0 in", "length": "30.0 in", "shoulders": "20.5 in", "sleeve": "24.0 in"}'::jsonb,
+  'Golden era 1997 Stüssy International Tribe oversized flannel overshirt in shadow navy and olive plaid. Features dual chest flap pockets, pearlescent buttons, and embroidered IST tab on side seam.',
+  '["100% heavyweight brushed cotton flannel", "Stüssy IST flag label on side hem", "Boxy 90s streetwear cut with curved hem", "Original Stüssy California label"]'::jsonb,
+  '["/images/products/stussy-flannel-overshirt.jpg"]'::jsonb,
+  TRUE, TRUE, 'thrift_1of1', 1,
+  'store-f7-archive', 'F-7 Flagship Archive',
+  FALSE, FALSE, FALSE, FALSE, FALSE,
+  '["Stüssy", "International Tribe", "Flannel", "Shadow Plaid", "90s Streetwear"]'::jsonb,
+  'Batch #48: Archival Workwear', NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title, price = EXCLUDED.price, images = EXCLUDED.images, details = EXCLUDED.details, measurements = EXCLUDED.measurements, updated_at = NOW();
+
+INSERT INTO public.products (
+  id, slug, title, category, subcategory, era, price, original_price, condition_grade, condition_tier,
+  size, measurements, description, details, images, in_stock, is_1of1, inventory_type, stock_count,
+  store_id, store_name, is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
+) VALUES (
+  'jk-archival-007',
+  '1996-north-face-nuptse-700-down-puffer',
+  '1996 The North Face Nuptse 700-Down Puffer Jacket',
+  'Apparel',
+  'Outerwear',
+  '1990s',
+  21000.00,
+  28000.00,
+  'Vintage 9/10 - Ultra Loft 700 Down',
+  'Good',
+  'M',
+  '{"chest": "23.5 in", "length": "26.5 in", "shoulders": "21.0 in", "sleeve": "25.0 in"}'::jsonb,
+  'Archival 1996 The North Face Nuptse in classic two-tone forest green and black nylon ripstop. High-loft 700 goose down fill, packable hood in collar, and embroidered white TNF chest & back logos.',
+  '["700-fill certified goose down insulation", "Original ripstop nylon with DWR finish", "Stowable hood rolls into collar", "YKK VISLON two-way front zip"]'::jsonb,
+  '["/images/products/north-face-nuptse-puffer.jpg"]'::jsonb,
+  TRUE, TRUE, 'thrift_1of1', 1,
+  'store-f7-archive', 'F-7 Flagship Archive',
+  FALSE, FALSE, FALSE, TRUE, TRUE,
+  '["The North Face", "Nuptse", "700 Down", "Puffer", "Vintage Outerwear"]'::jsonb,
+  'Batch #48: Archival Workwear', NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title, price = EXCLUDED.price, images = EXCLUDED.images, details = EXCLUDED.details, measurements = EXCLUDED.measurements, updated_at = NOW();
+
+INSERT INTO public.products (
+  id, slug, title, category, subcategory, era, price, original_price, condition_grade, condition_tier,
+  size, measurements, description, details, images, in_stock, is_1of1, inventory_type, stock_count,
+  store_id, store_name, is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
+) VALUES (
+  'jk-archival-008',
+  '1991-harley-davidson-3d-emblem-biker-tee',
+  '1991 Harley Davidson 3D Emblem Washed Biker Tee',
+  'Apparel',
+  'Graphic Tees',
+  '1990s',
+  18500.00,
+  24000.00,
+  'Vintage 9/10 - Soft Fade & Single Stitch',
+  'Mint Vintage',
+  'L',
+  '{"chest": "22.5 in", "length": "28.5 in", "shoulders": "20.0 in", "sleeve": "8.0 in"}'::jsonb,
+  'Iconic 1991 Harley-Davidson licensed 3D Emblem Fort Worth graphic tee. Features soaring bald eagle over scenic canyon artwork with vintage cracked ink print and single-stitch construction.',
+  '["Official 3D Emblem Fort Worth, Texas copyright 1991", "Single-stitch sleeves and hem", "Faded charcoal grey washed cotton", "Zero holes, tears, or dry rot"]'::jsonb,
+  '["/images/products/harley-davidson-vintage-tee.jpg"]'::jsonb,
+  TRUE, TRUE, 'thrift_1of1', 1,
+  'store-f7-archive', 'F-7 Flagship Archive',
+  FALSE, FALSE, FALSE, FALSE, TRUE,
+  '["Harley Davidson", "3D Emblem", "Biker Tee", "Single Stitch", "Vintage 1991"]'::jsonb,
+  'Batch #48: Archival Workwear', NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title, price = EXCLUDED.price, images = EXCLUDED.images, details = EXCLUDED.details, measurements = EXCLUDED.measurements, updated_at = NOW();
+
+INSERT INTO public.products (
+  id, slug, title, category, subcategory, era, price, original_price, condition_grade, condition_tier,
+  size, measurements, description, details, images, in_stock, is_1of1, inventory_type, stock_count,
+  store_id, store_name, is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
+) VALUES (
+  'jk-archival-009',
+  '1995-air-jordan-11-retro-concord-og',
+  '1995 Air Jordan 11 Retro Concord OG',
+  'Footwear',
+  'Sneakers',
+  '1990s',
+  34000.00,
+  45000.00,
+  'Vintage 9/10 - Oxidized Cream Ice Soles',
+  'Mint Vintage',
+  'US 10.5 (EU 44.5)',
+  '{"insole": "28.5 cm", "width": "Standard D"}'::jsonb,
+  'Tinker Hatfield signature design: the original 1995 Air Jordan 11 Concord. Features pristine high-cut black patent leather, white ballistic mesh, full-length carbon fiber shank plate, and authentic oxidized cream translucent outsole.',
+  '["Original high-cut patent leather cut", "Real carbon fiber spring plate intact", "Jumpman Jordan center tongue ribbon", "Preserved in temperature-controlled archive"]'::jsonb,
+  '["/images/products/jordan-11-concord-og.jpg"]'::jsonb,
+  TRUE, TRUE, 'thrift_1of1', 1,
+  'store-f7-archive', 'F-7 Flagship Archive',
+  FALSE, FALSE, FALSE, TRUE, TRUE,
+  '["Jordan 11", "Concord", "OG", "Patent Leather", "Sneakerhead Grail"]'::jsonb,
+  'Batch #48: Archival Workwear', NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title, price = EXCLUDED.price, images = EXCLUDED.images, details = EXCLUDED.details, measurements = EXCLUDED.measurements, updated_at = NOW();
+
+INSERT INTO public.products (
+  id, slug, title, category, subcategory, era, price, original_price, condition_grade, condition_tier,
+  size, measurements, description, details, images, in_stock, is_1of1, inventory_type, stock_count,
+  store_id, store_name, is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
+) VALUES (
+  'jk-archival-010',
+  '1990-red-wing-iron-ranger-8111-boots',
+  '1990 Red Wing Heritage Iron Ranger 8111 Boots',
+  'Footwear',
+  'Boots',
+  '1990s',
+  26000.00,
+  35000.00,
+  'Vintage 9/10 - Amber Harness Patina',
+  'Good',
+  'US 9.5 D (EU 42.5)',
+  '{"insole": "27.5 cm", "height": "6.0 in"}'::jsonb,
+  'Vintage 1990s Red Wing 8111 Iron Ranger work boots in Amber Harness oil-tanned leather. Features the classic double-layer cap toe, Goodyear welt construction, patinated brass eyelets, and Nitrile Cork outsole.',
+  '["Oil-tanned full-grain Amber Harness leather", "Goodyear welted resoleable construction", "Iconic double-layer cap toe", "Made in Red Wing, Minnesota, USA"]'::jsonb,
+  '["/images/products/red-wing-iron-ranger.jpg"]'::jsonb,
+  TRUE, TRUE, 'thrift_1of1', 1,
+  'store-f7-archive', 'F-7 Flagship Archive',
+  FALSE, FALSE, FALSE, FALSE, TRUE,
+  '["Red Wing", "Iron Ranger", "8111", "Goodyear Welt", "Made in USA", "Leather Boots"]'::jsonb,
+  'Batch #48: Archival Workwear', NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title, price = EXCLUDED.price, images = EXCLUDED.images, details = EXCLUDED.details, measurements = EXCLUDED.measurements, updated_at = NOW();
+
+INSERT INTO public.products (
+  id, slug, title, category, subcategory, era, price, original_price, condition_grade, condition_tier,
+  size, measurements, description, details, images, in_stock, is_1of1, inventory_type, stock_count,
+  store_id, store_name, is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
+) VALUES (
+  'jk-archival-011',
+  '1998-oakley-minutes-bullet-sunglasses',
+  '1998 Oakley Minutes Bullet Sunglasses',
+  'Accessories',
+  'Eyewear',
+  '1990s',
+  19500.00,
+  26000.00,
+  'Mint 9.5/10 - Flawless Lenses',
+  'Mint Vintage',
+  'One Size',
+  '{"lensWidth": "54mm", "bridge": "18mm", "temple": "135mm"}'::jsonb,
+  'Rare 1998 Y2K era Oakley Minutes with brushed silver X-Metal style sculpted frame and Fire Iridium mirror lenses. Original unobtainium ear socks and nose pads with zero peeling.',
+  '["Sculpted O-Matter lightweight frame", "Plutonite Fire Iridium high-contrast lenses", "Hydrophilic Unobtainium grips", "Collector grade with microfiber vault pouch"]'::jsonb,
+  '["/images/products/oakley-minutes-sunglasses.jpg"]'::jsonb,
+  TRUE, TRUE, 'thrift_1of1', 1,
+  'store-f7-archive', 'F-7 Flagship Archive',
+  FALSE, FALSE, FALSE, TRUE, FALSE,
+  '["Oakley", "Minutes", "Fire Iridium", "Y2K", "Vintage Eyewear", "Grail"]'::jsonb,
+  'Batch #48: Archival Workwear', NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title, price = EXCLUDED.price, images = EXCLUDED.images, details = EXCLUDED.details, measurements = EXCLUDED.measurements, updated_at = NOW();
+
+INSERT INTO public.products (
+  id, slug, title, category, subcategory, era, price, original_price, condition_grade, condition_tier,
+  size, measurements, description, details, images, in_stock, is_1of1, inventory_type, stock_count,
+  store_id, store_name, is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
+) VALUES (
+  'jk-archival-012',
+  '1992-carhartt-heavy-duck-canvas-tool-tote',
+  '1992 Carhartt Heavy Duck Canvas Tool Tote',
+  'Accessories',
+  'Bags',
+  '1990s',
+  9500.00,
+  13000.00,
+  'Vintage 8.5/10 - Heavyweight Canvas',
+  'Good',
+  'One Size (Large)',
+  '{"width": "18.0 in", "height": "14.0 in", "depth": "7.0 in"}'::jsonb,
+  'Ultra-durable vintage 1992 Carhartt workwear utility tool tote crafted from 100% 12-ounce cotton duck canvas with reinforced webbed shoulder straps and brass rivet reinforcements.',
+  '["12oz firm-hand Carhartt brown duck canvas", "Dual exterior slide pockets and reinforced base", "Antiqued brass rivets at stress points", "Original woven Carhartt C logo patch"]'::jsonb,
+  '["/images/products/carhartt-duck-tool-tote.jpg"]'::jsonb,
+  TRUE, TRUE, 'thrift_1of1', 1,
+  'store-f7-archive', 'F-7 Flagship Archive',
+  FALSE, FALSE, FALSE, FALSE, FALSE,
+  '["Carhartt", "Tool Tote", "Duck Canvas", "Vintage Bag", "Workwear"]'::jsonb,
+  'Batch #48: Archival Workwear', NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title, price = EXCLUDED.price, images = EXCLUDED.images, details = EXCLUDED.details, measurements = EXCLUDED.measurements, updated_at = NOW();
+
+INSERT INTO public.products (
+  id, slug, title, category, subcategory, era, price, original_price, condition_grade, condition_tier,
+  size, measurements, description, details, images, in_stock, is_1of1, inventory_type, stock_count,
+  store_id, store_name, is_hidden, is_reserved, is_archived, is_hot_deal, is_trending, tags, drop_batch, date_added
+) VALUES (
+  'jk-archival-013',
+  '1990-hermes-paris-silk-equestrian-scarf',
+  '1990 Hermès Paris Silk Equestrian Scarf (90cm)',
+  'Accessories',
+  'Scarves & Silks',
+  '1990s',
+  29000.00,
+  42000.00,
+  'Mint 9.5/10 - Plump Hand-Rolled Edges',
+  'Mint Vintage',
+  '90cm x 90cm',
+  '{"dimensions": "35.5 in x 35.5 in"}'::jsonb,
+  'Authentic 1990 Hermès Paris vintage 90cm carré scarf in 100% silk twill. Classic equestrian stirrup and harness motif in imperial navy, rich archive gold, and ivory. Features plump, hand-rolled edges.',
+  '["100% heavyweight mulberry silk twill", "Hand-rolled and hand-stitched hem edges", "Hermès Paris copyright stamped in print", "Flawless silk sheen with zero pulls or stains"]'::jsonb,
+  '["/images/products/hermes-silk-scarf.jpg"]'::jsonb,
+  TRUE, TRUE, 'thrift_1of1', 1,
+  'store-f7-archive', 'F-7 Flagship Archive',
+  FALSE, FALSE, FALSE, TRUE, FALSE,
+  '["Hermès", "Silk Scarf", "Carré 90", "Vintage Luxury", "Equestrian", "Grail"]'::jsonb,
+  'Batch #48: Archival Workwear', NOW()
+) ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title, price = EXCLUDED.price, images = EXCLUDED.images, details = EXCLUDED.details, measurements = EXCLUDED.measurements, updated_at = NOW();

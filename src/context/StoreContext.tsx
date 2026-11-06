@@ -19,6 +19,7 @@ import {
   StoreAccount,
 } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_STORES } from '../data/mockData';
+import { normalizeOrderItem } from '../utils/orderItem';
 import { encryptSecret } from '../utils/crypto';
 import { hashPassword, verifyPassword } from '../utils/crypto';
 import {
@@ -37,6 +38,14 @@ import {
   deleteSupabaseStore,
   toggleSupabaseStoreVisibility,
   seedInitialStoresToSupabase,
+  fetchSupabaseProducts,
+  syncSupabaseProduct,
+  deleteSupabaseProduct,
+  seedInitialProductsToSupabase,
+  fetchSupabasePaymentGateways,
+  syncSupabasePaymentGateway,
+  deleteSupabasePaymentGateway,
+  seedInitialGatewaysToSupabase,
 } from '../lib/supabase';
 import { verifyGoogleCredentialWithBackend } from '../lib/googleAuth';
 import { safeFetchJson, getApiUrl } from '../utils/api';
@@ -317,6 +326,20 @@ const INITIAL_GATEWAYS: PaymentGatewayConfig[] = [
     environment: 'live',
     publishableKey: 'pk_test_placeholder_key',
     encryptedSecretKey: encryptSecret('sk_test_placeholder_key'),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'gw-tompay',
+    type: 'tompay',
+    title: 'TomPay - Card & Digital Wallet (UK / Global)',
+    providerName: 'TomPay Financial Services Ltd',
+    isEnabled: true,
+    environment: 'live',
+    publishableKey: 'tp_live_8Oytj1Sc5WYTaCzZCSDCFDbSjeK0Frwx',
+    minOrderLimit: 500,
+    maxOrderLimit: 500000,
+    disclaimerNote: 'Pay securely via TomPay with global credit/debit cards and local wallets.',
+    customInstructions: 'Instant redirect to TomPay PCI-DSS Level 1 secure payment checkout session.',
     updatedAt: new Date().toISOString(),
   },
 ];
@@ -1334,11 +1357,81 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       )
       .subscribe();
 
+    // Realtime Postgres Changes Subscription for Products
+    const productsChannel = supabase
+      .channel('realtime:public:products')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'products' },
+        async () => {
+          const res = await fetchSupabaseProducts();
+          if (res.success && res.data.length > 0) {
+            setProducts(res.data);
+            try {
+              localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(res.data));
+            } catch {}
+          }
+        }
+      )
+      .subscribe();
+
+    // Realtime Postgres Changes Subscription for Payment Gateways
+    const gatewaysChannel = supabase
+      .channel('realtime:public:payment_gateways')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'payment_gateways' },
+        async () => {
+          const res = await fetchSupabasePaymentGateways();
+          if (res.success && res.data.length > 0) {
+            setPaymentGateways(res.data);
+            try {
+              localStorage.setItem(STORAGE_KEYS.GATEWAYS, JSON.stringify(res.data));
+            } catch {}
+          }
+        }
+      )
+      .subscribe();
+
+    // Initial Fetch of Products & Gateways from Supabase
+    fetchSupabaseProducts().then((res) => {
+      if (res.success && res.data.length > 0) {
+        setProducts(res.data);
+        try {
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(res.data));
+        } catch {}
+      }
+    });
+
+    fetchSupabasePaymentGateways().then((res) => {
+      if (res.success && res.data.length > 0) {
+        const existingIds = new Set(res.data.map((g) => g.id));
+        const missing = INITIAL_GATEWAYS.filter((g) => !existingIds.has(g.id));
+        const merged = [...res.data, ...missing];
+        setPaymentGateways(merged);
+        try {
+          localStorage.setItem(STORAGE_KEYS.GATEWAYS, JSON.stringify(merged));
+        } catch {}
+      } else {
+        setPaymentGateways((prev) => {
+          const existingIds = new Set(prev.map((g) => g.id));
+          const missing = INITIAL_GATEWAYS.filter((g) => !existingIds.has(g.id));
+          const merged = [...prev, ...missing];
+          try {
+            localStorage.setItem(STORAGE_KEYS.GATEWAYS, JSON.stringify(merged));
+          } catch {}
+          return merged;
+        });
+      }
+    });
+
     return () => {
       isMounted = false;
       authListener.subscription.unsubscribe();
       supabase.removeChannel(profileChannel);
       supabase.removeChannel(orderChannel);
+      supabase.removeChannel(productsChannel);
+      supabase.removeChannel(gatewaysChannel);
     };
   }, []);
 
@@ -2449,7 +2542,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [paymentGateways, setPaymentGateways] = useState<PaymentGatewayConfig[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.GATEWAYS);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingIds = new Set(parsed.map((g: PaymentGatewayConfig) => g.id));
+          const missing = INITIAL_GATEWAYS.filter((g) => !existingIds.has(g.id));
+          return [...parsed, ...missing];
+        }
+      }
     } catch {}
     return INITIAL_GATEWAYS;
   });
@@ -2902,6 +3002,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     setPaymentGateways((prev) => [...prev, newGateway]);
+    syncSupabasePaymentGateway(newGateway).catch(() => {});
 
     addAuditLog({
       provider: 'SECURITY_SWITCHBOARD',
@@ -2921,7 +3022,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const updatePaymentGateway = (id: string, updates: Partial<PaymentGatewayConfig>) => {
     setPaymentGateways((prev) =>
-      prev.map((g) => (g.id === id ? { ...g, ...updates, updatedAt: new Date().toISOString() } : g))
+      prev.map((g) => {
+        if (g.id === id) {
+          const updated = { ...g, ...updates, updatedAt: new Date().toISOString() };
+          syncSupabasePaymentGateway(updated).catch(() => {});
+          return updated;
+        }
+        return g;
+      })
     );
 
     addAuditLog({
@@ -2943,6 +3051,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const deletePaymentGateway = (id: string) => {
     const target = paymentGateways.find((g) => g.id === id);
     setPaymentGateways((prev) => prev.filter((g) => g.id !== id));
+    deleteSupabasePaymentGateway(id).catch(() => {});
 
     addAuditLog({
       provider: 'SECURITY_SWITCHBOARD',
@@ -2965,12 +3074,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       prev.map((g) => {
         if (g.id === id) {
           const isEnabled = !g.isEnabled;
+          const updated = { ...g, isEnabled, updatedAt: new Date().toISOString() };
+          syncSupabasePaymentGateway(updated).catch(() => {});
           addToast({
             type: isEnabled ? 'success' : 'info',
             title: isEnabled ? 'Gateway Enabled' : 'Gateway Disabled',
             message: `"${g.title}" is now ${isEnabled ? 'visible at checkout' : 'hidden from checkout'}.`,
           });
-          return { ...g, isEnabled, updatedAt: new Date().toISOString() };
+          return updated;
         }
         return g;
       })

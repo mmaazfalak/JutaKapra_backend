@@ -200,9 +200,9 @@ When a customer selects `gw-tompay`:
 
 ## 6. Execution Roadmap & Safety Constraints
 - [x] Document complete plan and architecture specification.
-- [ ] Create `supabase_products_and_gateways.sql` containing full table DDL, RLS policies, and seed inserts for products and gateways.
-- [ ] Implement `src/utils/orderItem.ts` and apply safe normalizer in `CustomerOrdersView.tsx`, `AccountView.tsx`, and `CheckoutView.tsx`.
-- [ ] Update `StoreContext.tsx` to dynamically query and synchronize `products` and `payment_gateways` with Supabase.
-- [ ] Add TomPay gateway option to `PaymentGatewayType` and checkout selector.
-- [ ] Verify build passes cleanly with zero errors (`npm run build`).
+- [x] Create `supabase_products_and_gateways.sql` containing full table DDL, RLS policies, and seed inserts for products and gateways.
+- [x] Implement `src/utils/orderItem.ts` and apply safe normalizer in `CustomerOrdersView.tsx`, `AccountView.tsx`, and `CheckoutView.tsx`.
+- [x] Update `StoreContext.tsx` to dynamically query and synchronize `products` and `payment_gateways` with Supabase.
+- [x] Add TomPay gateway option to `PaymentGatewayType` and checkout selector.
+- [x] Verify build passes cleanly with zero errors (`npm run build`).
 - [ ] **Strict Constraint**: Do NOT push to GitHub without explicit user instruction.
