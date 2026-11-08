@@ -335,7 +335,7 @@ const INITIAL_GATEWAYS: PaymentGatewayConfig[] = [
     providerName: 'TomPay Financial Services Ltd',
     isEnabled: true,
     environment: 'live',
-    publishableKey: 'tp_live_8Oytj1Sc5WYTaCzZCSDCFDbSjeK0Frwx',
+    publishableKey: 'tp_live_0Rwf4QnZIY8nOEHunJoenOnqu9olG28D',
     minOrderLimit: 500,
     maxOrderLimit: 500000,
     disclaimerNote: 'Pay securely via TomPay with global credit/debit cards and local wallets.',

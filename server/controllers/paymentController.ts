@@ -5,9 +5,12 @@ import { OrderModel } from '../models/order.model.js';
 import { sendOrderConfirmedEmail } from '../services/emailService.js';
 import mongoose from 'mongoose';
 
-const TOMPAY_API_KEY = process.env.TOMPAY_API_KEY || 'tp_live_8Oytj1Sc5WYTaCzZCSDCFDbSjeK0Frwx';
-const TOMPAY_API_SECRET = process.env.TOMPAY_API_SECRET || 'tp_secret_E5DqrQSB1uvTKg8Eujsity4f4xVXtiQDN9fxMvPK006jUT7H';
+const TOMPAY_API_KEY = process.env.TOMPAY_API_KEY || 'tp_live_0Rwf4QnZIY8nOEHunJoenOnqu9olG28D';
+const TOMPAY_API_SECRET = process.env.TOMPAY_API_SECRET || 'tp_secret_MzuSGdHODnfkCDDnwgwuJbw42HIzH1nMTsCgHFeWr3sbuxgG';
 const TOMPAY_BASE_URL = process.env.TOMPAY_BASE_URL || 'https://api.tompay.com/v1';
+
+// Standard exchange rate: 1 USD = ~278 PKR (customizable via PKR_TO_USD_RATE)
+const PKR_TO_USD_RATE = Number(process.env.PKR_TO_USD_RATE) || 280;
 
 /**
  * 1. GET /api/payments/gateways
@@ -101,11 +104,20 @@ export async function createTomPaySession(req: Request, res: Response): Promise<
       return;
     }
 
+    const requestedAmount = Number(amount);
+    // Convert PKR amount to USD for international card processing via TomPay
+    const isPkr = !currency || currency.toUpperCase() === 'PKR';
+    const amountInUsd = isPkr ? Number((requestedAmount / PKR_TO_USD_RATE).toFixed(2)) : requestedAmount;
+    const checkoutCurrency = isPkr ? 'USD' : currency.toUpperCase();
+
     const payload = {
       order_id: orderId || orderNumber || 'ord-' + Date.now().toString(36),
       order_number: orderNumber || 'FS-' + Math.floor(10000 + Math.random() * 90000),
-      amount: Math.round(Number(amount)),
-      currency: currency || 'PKR',
+      amount: amountInUsd,
+      currency: checkoutCurrency,
+      original_amount_pkr: requestedAmount,
+      exchange_rate: PKR_TO_USD_RATE,
+      payment_type: 'card_deposit',
       customer: {
         name: customer?.fullName || customer?.name || 'Customer',
         email: customer?.email || '',
@@ -116,7 +128,7 @@ export async function createTomPaySession(req: Request, res: Response): Promise<
       callback_url: 'https://jutakaprabackend.vercel.app/api/payments/tompay/webhook',
     };
 
-    console.log('[TomPay Service] Creating payment session for order:', payload.order_number, 'Amount:', payload.amount);
+    console.log('[TomPay Service] Card deposit session: PKR', requestedAmount, '-> USD', amountInUsd, 'for order:', payload.order_number);
 
     let sessionUrl = '';
     let sessionId = 'tp_sess_' + Date.now().toString(36);
@@ -146,7 +158,7 @@ export async function createTomPaySession(req: Request, res: Response): Promise<
 
     // Fallback if sandbox/direct redirect isn't ready
     if (!sessionUrl) {
-      sessionUrl = `https://checkout.tompay.com/pay/${sessionId}?ref=${payload.order_number}&amt=${payload.amount}`;
+      sessionUrl = `https://checkout.tompay.com/pay/${sessionId}?ref=${payload.order_number}&amt=${payload.amount}&cur=${payload.currency}`;
     }
 
     res.status(200).json({
@@ -154,7 +166,11 @@ export async function createTomPaySession(req: Request, res: Response): Promise<
       sessionId,
       sessionUrl,
       orderNumber: payload.order_number,
-      message: 'TomPay session created successfully',
+      amountUsd: amountInUsd,
+      currency: checkoutCurrency,
+      originalAmountPkr: requestedAmount,
+      exchangeRate: PKR_TO_USD_RATE,
+      message: 'TomPay card deposit session created successfully in USD',
     });
   } catch (error: any) {
     console.error('Create TomPay session error:', error);
